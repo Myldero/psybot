@@ -5,7 +5,8 @@ from discord import app_commands
 from psybot import ctf
 from psybot import ctftime
 from psybot import challenge
-from psybot import GUILD_ID, BOT_TOKEN
+from psybot.config import config
+from psybot.database import db
 
 intents = discord.Intents.all()
 
@@ -19,13 +20,14 @@ ctftime.add_commands(tree)
 
 @client.event
 async def on_ready():
-    await tree.sync(guild=discord.Object(GUILD_ID))
+    await config.setup_discord_ids(client.get_guild(config.guild_id), db)
+    await tree.sync(guild=discord.Object(config.guild_id))
     # await tree.sync()  # Syncing global commands
     print(f"{client.user.name} Online")
 
 
 async def main():
     async with client:
-        await client.start(BOT_TOKEN)
+        await client.start(config.bot_token)
 
 asyncio.run(main())

@@ -1,4 +1,10 @@
-from psybot import db
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from psybot.config import config
+
+
+mongo_client = AsyncIOMotorClient(config.mongodb_uri)
+db = mongo_client[config.mongodb_db]
 
 
 async def create_indexes():
@@ -10,7 +16,4 @@ async def create_indexes():
     await db.backup_category.create_index('category_id', unique=True)
     await db.backup_category.create_index('original_id')
 
-
-def create_from_fiskebot():
-    # TODO: Create migration from fiskebot
-    pass
+    await db.ctf_category.create_index('name', unique=True)

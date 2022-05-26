@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 import datetime
 from tabulate import tabulate
 
-from psybot import GUILD_ID, CTFTIME_TEAM
+from psybot.config import config
 
 
 class Ctftime(app_commands.Group):
@@ -100,11 +100,11 @@ class Ctftime(app_commands.Group):
             return
 
         if team is None:
-            if CTFTIME_TEAM is None:
+            if config.ctftime_team is None:
                 await interaction.response.send_message("Please specify team")
                 return
             else:
-                team = CTFTIME_TEAM
+                team = config.ctftime_team
 
         await interaction.response.defer()
 
@@ -160,4 +160,4 @@ class Ctftime(app_commands.Group):
 
 
 def add_commands(tree: app_commands.CommandTree):
-    tree.add_command(Ctftime(), guild=discord.Object(id=GUILD_ID))
+    tree.add_command(Ctftime(), guild=discord.Object(id=config.guild_id))

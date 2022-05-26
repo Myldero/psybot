@@ -3,7 +3,8 @@ from typing import Optional
 
 from discord import app_commands
 import discord
-from psybot import GUILD_ID, INCOMPLETE_CATEGORY, COMPLETE_CATEGORY, db
+from psybot.config import config
+from psybot.database import db
 from psybot.utils import move_channel
 
 
@@ -36,7 +37,7 @@ async def done(interaction: discord.Interaction, contributors: Optional[str]):
 
     await db.challenge.update_one({'_id': chall_db['_id']}, {'$set': {'contributors': users}})
 
-    await move_channel(interaction.channel, interaction.guild.get_channel(COMPLETE_CATEGORY))
+    await move_channel(interaction.channel, interaction.guild.get_channel(config.complete_category))
 
     msg = "{} was solved by ".format(interaction.channel.mention) + " ".join(f"<@!{user}>" for user in users) + " !"
     await interaction.guild.get_channel(ctf_db['channel_id']).send(msg)
@@ -55,11 +56,11 @@ async def undone(interaction: discord.Interaction):
 
     await db.challenge.update_one({'channel_id': interaction.channel.id}, {'$unset': {'contributors': 1}})
 
-    await move_channel(interaction.channel, interaction.guild.get_channel(INCOMPLETE_CATEGORY))
+    await move_channel(interaction.channel, interaction.guild.get_channel(config.incomplete_category))
 
     await interaction.response.send_message("Reopened challenge as not done")
 
 
 def add_commands(tree: app_commands.CommandTree):
-    tree.add_command(done, guild=discord.Object(id=GUILD_ID))
-    tree.add_command(undone, guild=discord.Object(id=GUILD_ID))
+    tree.add_command(done, guild=discord.Object(id=config.guild_id))
+    tree.add_command(undone, guild=discord.Object(id=config.guild_id))

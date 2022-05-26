@@ -1,6 +1,10 @@
 import discord
 
-from psybot import CATEGORY_MAX_CHANNELS, db
+from psybot.database import db
+
+
+MAX_CHANNELS = 500
+CATEGORY_MAX_CHANNELS = 50
 
 
 def get_category_pos(category_channel: discord.CategoryChannel, name: str):
