@@ -1,10 +1,13 @@
+import asyncio
 import json
 import os.path
 import re
 from typing import List, Optional
 
 import discord
+from diff_match_patch import diff_match_patch
 from discord import app_commands
+from discord import ui
 
 from psybot.database import db
 from psybot.config import config
@@ -93,27 +96,23 @@ class CtfCommands(app_commands.Group):
 
         name = name.lower().replace(" ", "_").replace("-", "_")
 
+        new_role = await interaction.guild.create_role(name=name + "-team")
         overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False)
+            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            new_role: discord.PermissionOverwrite(view_channel=True)
         }
 
         if not private:
             overwrites[interaction.guild.get_role(config.team_role)] = discord.PermissionOverwrite(view_channel=True)
-
-        new_role = None
-        if config.per_ctf_roles:
-            new_role = await interaction.guild.create_role(name=name + "-team")
-            overwrites[new_role] = discord.PermissionOverwrite(view_channel=True)
 
         ctf_category = interaction.guild.get_channel(config.ctfs_category)
         new_channel = await create_channel(name, overwrites, ctf_category, challenge=False)
 
         data = {
             'name': name,
-            'channel_id': new_channel.id
+            'channel_id': new_channel.id,
+            'role_id': new_role.id
         }
-        if new_role:
-            data['role_id'] = new_role.id
         if ctftime:
             regex_ctftime = re.search(r'^(?:https?://ctftime.org/event/)?(\d+)/?$', ctftime)
             if regex_ctftime:
@@ -223,11 +222,10 @@ class CtfCommands(app_commands.Group):
             except AttributeError:
                 pass
 
-        if 'role_id' in ctf_db:
-            try:
-                await interaction.guild.get_role(ctf_db['role_id']).delete(reason="Deleted CTF channels")
-            except AttributeError:
-                pass
+        try:
+            await interaction.guild.get_role(ctf_db['role_id']).delete(reason="Deleted CTF channels")
+        except AttributeError:
+            pass
         await delete_channel(interaction.channel)
         await db.challenge.delete_many({'ctf_id': ctf_db['_id']})
         await db.ctf.delete_one({'_id': ctf_db['_id']})
@@ -264,15 +262,31 @@ async def invite(interaction: discord.Interaction, user: discord.Member):
     if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
         return
 
-    if 'role_id' not in ctf_db:
-        await interaction.response.send_message("Cannot invite players! (Per-CTF roles are turned off)", ephemeral=True)
-        return
-
     await user.add_roles(interaction.guild.get_role(ctf_db['role_id']), reason="Invited to CTF")
     await interaction.response.send_message("Invited user {}".format(user.mention))
+
+
+@app_commands.context_menu(name="Edit Bot Message")
+async def edit_bot_message(interaction: discord.Interaction, message: discord.Message):
+    if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
+        await interaction.response.send_message("Only an admin can edit bot messages", ephemeral=True)
+        return
+    if message.author.id != interaction.application_id:
+        await interaction.response.send_message("Can only be used to edit bot messages", ephemeral=True)
+        return
+
+    class EditMessageModal(ui.Modal, title='Edit Message'):
+        edit = ui.TextInput(label='Edit', style=discord.TextStyle.paragraph, default=message.content, max_length=2000)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            await message.edit(content=self.edit.value)
+            await interaction.response.defer()
+
+    await interaction.response.send_modal(EditMessageModal())
 
 
 def add_commands(tree: app_commands.CommandTree):
     tree.add_command(CtfCommands(name="ctf"), guild=discord.Object(id=config.guild_id))
     tree.add_command(add, guild=discord.Object(id=config.guild_id))
     tree.add_command(invite, guild=discord.Object(id=config.guild_id))
+    tree.add_command(edit_bot_message, guild=discord.Object(id=config.guild_id))

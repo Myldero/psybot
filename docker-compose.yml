@@ -1,0 +1,37 @@
+version: '3'
+services:
+  psybot:
+    build: .
+    environment:
+      - "BOT_TOKEN=${BOT_TOKEN}"
+      - "GUILD_ID=${GUILD_ID}"
+      - "CTFTIME_TEAM=${CTFTIME_TEAM}"
+      - "MONGODB_DB=${MONGODB_DB:-psybot}"
+      - "BACKUPS_DIR=/home/psybot/backups"
+      - "TEAM_ROLE=${TEAM_ROLE}"
+      - "ADMIN_ROLE=${ADMIN_ROLE}"
+      - "CTFS_CATEGORY=${CTFS_CATEGORY}"
+      - "INCOMPLETE_CATEGORY=${INCOMPLETE_CATEGORY}"
+      - "COMPLETE_CATEGORY=${COMPLETE_CATEGORY}"
+      - "ARCHIVE_CATEGORY=${ARCHIVE_CATEGORY}"
+      - "CTF_ARCHIVE_CATEGORY=${CTF_ARCHIVE_CATEGORY}"
+      - "EXPORT_CHANNEL=${EXPORT_CHANNEL}"
+    restart: always
+    volumes:
+      - ./backups:/home/psybot/backups
+    depends_on:
+      - mongo
+    stop_signal: SIGKILL
+  mongo:
+    image: mongo
+    restart: always
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mdb:/data/db
+      - mdb_config:/data/configdb
+volumes:
+  mdb:
+    external: true
+  mdb_config:
+    external: true
