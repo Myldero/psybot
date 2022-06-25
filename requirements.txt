@@ -1,4 +1,4 @@
-git+https://github.com/Rapptz/discord.py@f19f51f
+git+https://github.com/Rapptz/discord.py@7ad0075
 tabulate~=0.8.9
 motor~=3.0.0
 aiohttp~=3.8.1
