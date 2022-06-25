@@ -118,7 +118,7 @@ class CtfCommands(app_commands.Group):
             if regex_ctftime:
                 data['ctftime_id'] = int(regex_ctftime.group(1))
                 ctf_title, ctf_url, ctf_start, ctf_end = await Ctftime.get_ctf_info(data['ctftime_id'])
-                ctf_info_msg = f"""{ctf_title}\n\n<t:{ctf_start}> — <t:{ctf_end}>\n\n<{ctf_url}>"""
+                ctf_info_msg = f"""{ctf_title}\n\n**START** <t:{ctf_start}:R> <t:{ctf_start}>\n**END** <t:{ctf_end}:R> <t:{ctf_end}>\n\n<{ctf_url}>"""
                 info_msg = await new_channel.send(ctf_info_msg)
                 await info_msg.pin()
 
