@@ -1,6 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from psybot.config import config
+from config import config
 
 
 mongo_client = AsyncIOMotorClient(config.mongodb_uri)

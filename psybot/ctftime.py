@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 import datetime
 from tabulate import tabulate
 
-from psybot.config import config
+from config import config
 
 
 class Ctftime(app_commands.Group):

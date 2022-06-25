@@ -2,9 +2,9 @@ import asyncio
 import discord
 from discord import app_commands
 
-from psybot import ctf, ctftime, challenge, notes
-from psybot.config import config
-from psybot.database import db
+import ctf, ctftime, challenge, notes
+from config import config
+from database import db
 
 intents = discord.Intents.all()
 
@@ -30,12 +30,11 @@ async def on_ready():
     # await tree.sync()  # Syncing global commands
     print(f"{client.user.name} Online")
 
-    guild = client.get_guild(config.guild_id)
-    channel = guild.get_channel(config.export_channel)
-
 
 async def main():
     async with client:
         await client.start(config.bot_token)
 
-asyncio.run(main())
+
+if __name__ == '__main__':
+    asyncio.run(main())

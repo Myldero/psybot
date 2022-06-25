@@ -5,14 +5,13 @@ import re
 from typing import List, Optional
 
 import discord
-from diff_match_patch import diff_match_patch
 from discord import app_commands
 from discord import ui
 
-from psybot.database import db
-from psybot.config import config
-from psybot.ctftime import Ctftime
-from psybot.utils import move_channel, create_channel, delete_channel
+from database import db
+from config import config
+from ctftime import Ctftime
+from utils import move_channel, create_channel, delete_channel
 
 
 async def get_ctf_db(interaction: discord.Interaction, archived=False):

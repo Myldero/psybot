@@ -3,7 +3,7 @@ import discord
 from diff_match_patch import diff_match_patch
 from discord import app_commands, ui
 
-from psybot.config import config
+from config import config
 
 
 class ModalNoteView(ui.View):

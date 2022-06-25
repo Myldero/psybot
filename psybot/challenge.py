@@ -3,9 +3,9 @@ from typing import Optional
 
 from discord import app_commands
 import discord
-from psybot.config import config
-from psybot.database import db
-from psybot.utils import move_channel
+from config import config
+from database import db
+from utils import move_channel
 
 
 async def check_challenge(interaction: discord.Interaction):
