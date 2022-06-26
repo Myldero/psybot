@@ -8,6 +8,7 @@ services:
       - "CTFTIME_TEAM=${CTFTIME_TEAM}"
       - "MONGODB_DB=${MONGODB_DB:-psybot}"
       - "BACKUPS_DIR=/home/psybot/backups"
+      - "ENFORCE_CATEGORIES=${ENFORCE_CATEGORIES}"
       - "TEAM_ROLE=${TEAM_ROLE}"
       - "ADMIN_ROLE=${ADMIN_ROLE}"
       - "CTFS_CATEGORY=${CTFS_CATEGORY}"

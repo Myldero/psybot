@@ -341,6 +341,11 @@ async def add(interaction: discord.Interaction, category: str, name: str):
     name = name.lower().replace(" ", "_").replace("-", "_")
     fullname = f"{ctf}-{category}-{name}"
 
+    if config.enforce_categories:
+        if not await db.ctf_category.find_one({'name': category}):
+            await interaction.response.send_message("Invalid CTF category", ephemeral=True)
+            return
+
     new_channel = await create_channel(fullname, interaction.channel.overwrites, incomplete_category)
 
     await db.challenge.insert_one({'name': name, 'category': category, 'channel_id': new_channel.id, 'ctf_id': ctf_db['_id']})
