@@ -29,13 +29,13 @@ def get_category_pos(category_channel: discord.CategoryChannel, name: str):
 
 
 async def get_backup_category(original_category: discord.CategoryChannel):
-    backups = []
+    last_backup = None
     async for cat in db.backup_category.find({'original_id': original_category.id}).sort('index', 1):
-        backups.append(cat)
+        last_backup = cat
         category = original_category.guild.get_channel(cat['category_id'])
         if len(category.channels) < CATEGORY_MAX_CHANNELS:
             return category
-    idx = 2 if not backups else backups[-1]['index']+1
+    idx = 2 if not last_backup else last_backup['index']+1
     new_category = await original_category.guild.create_category(f"{original_category.name} {idx}", position=original_category.position)
     await db.backup_category.insert_one({'original_id': original_category.id, 'category_id': new_category.id, 'index': idx})
     return new_category
