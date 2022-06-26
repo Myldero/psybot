@@ -1,10 +1,13 @@
 import asyncio
+import sys
+
 import discord
+import pymongo.errors
 from discord import app_commands
 
 import ctf, ctftime, challenge, notes
 from config import config
-from database import db
+from database import db, create_indexes
 
 intents = discord.Intents.all()
 
@@ -25,6 +28,12 @@ async def setup_hook():
 
 @client.event
 async def on_ready():
+    try:
+        await db.command("ping")
+    except pymongo.errors.ServerSelectionTimeoutError:
+        print("Could not connect to MongoDB", file=sys.stderr)
+        exit(1)
+    await create_indexes()
     await config.setup_discord_ids(client.get_guild(config.guild_id), db)
     await tree.sync(guild=discord.Object(config.guild_id))
     # await tree.sync()  # Syncing global commands

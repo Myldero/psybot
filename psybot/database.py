@@ -17,3 +17,5 @@ async def create_indexes():
     await db.backup_category.create_index('original_id')
 
     await db.ctf_category.create_index('name', unique=True)
+
+    await db.discord_ids.create_index('guild_id', unique=True)

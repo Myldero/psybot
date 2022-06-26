@@ -1,4 +1,5 @@
 import os
+import sys
 
 import discord
 
@@ -7,7 +8,7 @@ def parse_variable(variable, vartype, default=None, required=False):
     value = os.getenv(variable, None)
     if not value:
         if required:
-            print(f"Missing required environment variable: {variable}")
+            print(f"Missing required environment variable: {variable}", file=sys.stderr)
             exit(1)
         return default
 
@@ -78,7 +79,7 @@ class Config:
             value = self.__dict__[key]
             if value:
                 if not self._discord_get(guild, value, key_type):
-                    print(f"Invalid discord id for {key}: {value}")
+                    print(f"Invalid discord id for {key}: {value}", file=sys.stderr)
                     exit(1)
                 ids[key] = value
             elif key in ids:
