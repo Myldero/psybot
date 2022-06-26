@@ -21,9 +21,12 @@ class Ctftime(app_commands.Group):
                 if response.status != 200:
                     return None
                 data = await response.json()
-                start_time = int(datetime.datetime.strptime(data["start"], "%Y-%m-%dT%H:%M:%S%z").timestamp())
-                end_time = int(datetime.datetime.strptime(data["finish"], "%Y-%m-%dT%H:%M:%S%z").timestamp())
-                return data['title'], data['url'], start_time, end_time
+                return {
+                    'title': data['title'],
+                    'url': data['url'],
+                    'start': int(datetime.datetime.strptime(data["start"], "%Y-%m-%dT%H:%M:%S%z").timestamp()),
+                    'end': int(datetime.datetime.strptime(data["finish"], "%Y-%m-%dT%H:%M:%S%z").timestamp()),
+                }
 
     @staticmethod
     def get_table_from_html(soup):

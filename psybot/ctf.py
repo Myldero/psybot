@@ -1,4 +1,4 @@
-import asyncio
+import datetime
 import json
 import os.path
 import re
@@ -14,7 +14,7 @@ from ctftime import Ctftime
 from utils import move_channel, create_channel, delete_channel, MAX_CHANNELS
 
 
-async def get_ctf_db(interaction: discord.Interaction, archived=False):
+async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] = False):
     ctf_db = await db.ctf.find_one({'channel_id': interaction.channel.id})
     if ctf_db is None:
         await interaction.response.send_message("Not a CTF channel!", ephemeral=True)
@@ -86,6 +86,21 @@ async def export_channels(channels: List[discord.TextChannel]):
     return ctf_export
 
 
+def create_info_message(info):
+    msg = info['title']
+    if 'start' in info or 'end' in info:
+        msg += "\n"
+    if 'start' in info:
+        msg += f"\n**START** <t:{info['start']}:R> <t:{info['start']}>"
+    if 'end' in info:
+        msg += f"\n**END** <t:{info['end']}:R> <t:{info['end']}>"
+    if 'url' in info:
+        msg += f"\n\n{info['url']}"
+    if 'creds' in info:
+        msg += "\n\n**CREDENTIALS**\n" + discord.utils.escape_mentions(info['creds'])
+    return msg
+
+
 class CtfCommands(app_commands.Group):
     @app_commands.command(description="Create a new CTF event")
     async def create(self, interaction: discord.Interaction, name: str, ctftime: Optional[str], private: bool = False):
@@ -115,21 +130,90 @@ class CtfCommands(app_commands.Group):
             'channel_id': new_channel.id,
             'role_id': new_role.id
         }
+
+        info = {'title': name}
+
         if ctftime:
             regex_ctftime = re.search(r'^(?:https?://ctftime.org/event/)?(\d+)/?$', ctftime)
             if regex_ctftime:
-                data['ctftime_id'] = int(regex_ctftime.group(1))
-                ctf_title, ctf_url, ctf_start, ctf_end = await Ctftime.get_ctf_info(data['ctftime_id'])
-                ctf_info_msg = f"""{ctf_title}\n\n**START** <t:{ctf_start}:R> <t:{ctf_start}>\n**END** <t:{ctf_end}:R> <t:{ctf_end}>\n\n<{ctf_url}>"""
-                info_msg = await new_channel.send(ctf_info_msg)
-                await info_msg.pin()
+                info['ctftime_id'] = int(regex_ctftime.group(1))
+                ctf_info = await Ctftime.get_ctf_info(info['ctftime_id'])
+                info |= ctf_info
+
+        data['info'] = info
+        info_msg = await new_channel.send(create_info_message(info))
+        data['info_msg'] = info_msg.id
+        await info_msg.pin()
 
         await db.ctf.insert_one(data)
         await interaction.response.send_message(f"Created ctf {new_channel.mention}")
 
-    @app_commands.command(description="Display status of the challenges in the CTF")
-    async def status(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"Not implemented", ephemeral=True)
+    @app_commands.command(description="Update CTF information")
+    @app_commands.choices(field=[
+        app_commands.Choice(name="start", value="start"),
+        app_commands.Choice(name="end", value="end"),
+        app_commands.Choice(name="url", value="url"),
+        app_commands.Choice(name="creds", value="creds"),
+        app_commands.Choice(name="ctftime", value="ctftime")
+    ])
+    async def update(self, interaction: discord.Interaction, field: str, value: str):
+        if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
+            await interaction.response.send_message("Only an admin can create a CTF event", ephemeral=True)
+            return
+        if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
+            return
+        info = ctf_db.get('info') or {}
+        if field == "start" or field == "end":
+            if value.isdigit():
+                t = int(value)
+            else:
+                try:
+                    t = int(datetime.datetime.strptime(value, "%Y-%m-%d %H:%M %z").timestamp())
+                except ValueError:
+                    try:
+                        t = int(datetime.datetime.strptime(value, "%Y-%m-%d %H:%M").timestamp())
+                    except ValueError:
+                        await interaction.response.send_message("Invalid time. Either Unix Timestamp or \"%Y-%m-%d %H:%M %z\" (Timezone is optional but can for example be \"+0200\")", ephemeral=True)
+                        return
+            info[field] = t
+        elif field == "creds":
+            c = value.split(":", 1)
+            username, password = c[0], c[1] if len(c) > 1 else "password"
+            original = f"Name: `{username}`\nPassword: `{password}`"
+
+            class CredsModal(ui.Modal, title='Edit Credentials'):
+                edit = ui.TextInput(label='Edit', style=discord.TextStyle.paragraph, default=original, max_length=1000)
+
+                async def on_submit(self, submit_interaction: discord.Interaction):
+                    info["creds"] = self.edit.value
+                    await db.ctf.update_one({'_id': ctf_db['_id']}, {'$set': {'info': info}})
+                    await interaction.channel.get_partial_message(ctf_db['info_msg']).edit(content=create_info_message(info))
+                    await submit_interaction.response.send_message("Updated info", ephemeral=True)
+
+            await interaction.response.send_modal(CredsModal())
+            return
+        elif field == "url":
+            if re.search(r'^https?://', value):
+                info["url"] = value
+            else:
+                await interaction.response.send_message("Invalid url", ephemeral=True)
+                return
+        elif field == "ctftime":
+            regex_ctftime = re.search(r'^(?:https?://ctftime.org/event/)?(\d+)/?$', value)
+            if regex_ctftime:
+                info['ctftime_id'] = int(regex_ctftime.group(1))
+                ctf_info = await Ctftime.get_ctf_info(info['ctftime_id'])
+                info |= ctf_info
+            else:
+                await interaction.response.send_message("Invalid ctftime link", ephemeral=True)
+                return
+        else:
+            await interaction.response.send_message("Invalid field", ephemeral=True)
+            return
+
+        await db.ctf.update_one({'_id': ctf_db['_id']}, {'$set': {'info': info}})
+        await interaction.channel.get_partial_message(ctf_db['info_msg']).edit(content=create_info_message(info))
+        await interaction.response.send_message("Updated info", ephemeral=True)
 
     @app_commands.command(description="Archive a CTF")
     async def archive(self, interaction: discord.Interaction):
@@ -274,27 +358,7 @@ async def invite(interaction: discord.Interaction, user: discord.Member):
     await interaction.response.send_message("Invited user {}".format(user.mention))
 
 
-@app_commands.context_menu(name="Edit Bot Message")
-async def edit_bot_message(interaction: discord.Interaction, message: discord.Message):
-    if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
-        await interaction.response.send_message("Only an admin can edit bot messages", ephemeral=True)
-        return
-    if message.author.id != interaction.application_id:
-        await interaction.response.send_message("Can only be used to edit bot messages", ephemeral=True)
-        return
-
-    class EditMessageModal(ui.Modal, title='Edit Message'):
-        edit = ui.TextInput(label='Edit', style=discord.TextStyle.paragraph, default=message.content, max_length=2000)
-
-        async def on_submit(self, interaction: discord.Interaction):
-            await message.edit(content=self.edit.value)
-            await interaction.response.defer()
-
-    await interaction.response.send_modal(EditMessageModal())
-
-
 def add_commands(tree: app_commands.CommandTree):
     tree.add_command(CtfCommands(name="ctf"), guild=discord.Object(id=config.guild_id))
     tree.add_command(add, guild=discord.Object(id=config.guild_id))
     tree.add_command(invite, guild=discord.Object(id=config.guild_id))
-    tree.add_command(edit_bot_message, guild=discord.Object(id=config.guild_id))
