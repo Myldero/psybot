@@ -245,7 +245,10 @@ async def add(interaction: discord.Interaction, category: str, name: str):
     if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
         return
     if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
-        await interaction.response.send_message("There are too many channels on this discord server", ephemeral=True)
+        admin_role = interaction.guild.get_role(config.admin_role)
+        await interaction.response.send_message(f"There are too many channels on this discord server. Please "
+                                                f"wait for an admin to delete some channels. {admin_role.mention}",
+                                                allowed_mentions=discord.AllowedMentions.all())
         return
     incomplete_category = interaction.guild.get_channel(config.incomplete_category)
 
