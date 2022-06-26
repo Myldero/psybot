@@ -11,7 +11,7 @@ from discord import ui
 from database import db
 from config import config
 from ctftime import Ctftime
-from utils import move_channel, create_channel, delete_channel
+from utils import move_channel, create_channel, delete_channel, MAX_CHANNELS
 
 
 async def get_ctf_db(interaction: discord.Interaction, archived=False):
@@ -91,6 +91,9 @@ class CtfCommands(app_commands.Group):
     async def create(self, interaction: discord.Interaction, name: str, ctftime: Optional[str], private: bool = False):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
             await interaction.response.send_message("Only an admin can create a CTF event", ephemeral=True)
+            return
+        if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
+            await interaction.response.send_message("There are too many channels on this discord server", ephemeral=True)
             return
 
         name = name.lower().replace(" ", "_").replace("-", "_")
@@ -240,6 +243,9 @@ async def category_autocomplete(interaction: discord.Interaction, current: str) 
 @app_commands.autocomplete(category=category_autocomplete)
 async def add(interaction: discord.Interaction, category: str, name: str):
     if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
+        return
+    if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
+        await interaction.response.send_message("There are too many channels on this discord server", ephemeral=True)
         return
     incomplete_category = interaction.guild.get_channel(config.incomplete_category)
 
