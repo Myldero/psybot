@@ -158,7 +158,7 @@ class CtfCommands(app_commands.Group):
     ])
     async def update(self, interaction: discord.Interaction, field: str, value: str):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
-            await interaction.response.send_message("Only an admin can create a CTF event", ephemeral=True)
+            await interaction.response.send_message("Only an admin can update CTF information", ephemeral=True)
             return
         if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return

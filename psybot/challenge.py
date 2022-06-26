@@ -3,8 +3,11 @@ from typing import Optional
 
 from discord import app_commands
 import discord
+from pymongo.errors import DuplicateKeyError
+
 from config import config
 from database import db
+from ctf import category_autocomplete
 from utils import move_channel
 
 
@@ -61,6 +64,31 @@ async def undone(interaction: discord.Interaction):
     await interaction.response.send_message("Reopened challenge as not done")
 
 
+class CategoryCommands(app_commands.Group):
+
+    @app_commands.command(description="Create CTF category suggestion")
+    @app_commands.autocomplete(category=category_autocomplete)
+    async def create(self, interaction: discord.Interaction, category: str):
+        try:
+            await db.ctf_category.insert_one({'name': category, 'count': 5})
+        except DuplicateKeyError:
+            await interaction.response.send_message("CTF category already exists", ephemeral=True)
+        else:
+            await interaction.response.send_message("Created CTF category", ephemeral=True)
+
+    @app_commands.command(description="Delete CTF category suggestion")
+    @app_commands.autocomplete(category=category_autocomplete)
+    async def delete(self, interaction: discord.Interaction, category: str):
+        if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
+            await interaction.response.send_message("Only an admin can delete categories", ephemeral=True)
+            return
+        if (await db.ctf_category.delete_one({'name': category})).deleted_count == 0:
+            await interaction.response.send_message("Unknown CTF category", ephemeral=True)
+        else:
+            await interaction.response.send_message("Deleted CTF category", ephemeral=True)
+
+
 def add_commands(tree: app_commands.CommandTree):
     tree.add_command(done, guild=discord.Object(id=config.guild_id))
     tree.add_command(undone, guild=discord.Object(id=config.guild_id))
+    tree.add_command(CategoryCommands(name="category"), guild=discord.Object(id=config.guild_id))
