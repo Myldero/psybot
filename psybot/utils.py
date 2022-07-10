@@ -1,6 +1,6 @@
 import discord
 
-from database import db
+from psybot.database import db
 
 
 MAX_CHANNELS = 500

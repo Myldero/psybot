@@ -5,9 +5,9 @@ import discord
 import pymongo.errors
 from discord import app_commands
 
-import ctf, ctftime, challenge, notes
-from config import config
-from database import db, create_indexes
+from psybot.modules import ctf, ctftime, challenge, notes
+from psybot.config import config
+from psybot.database import db, create_indexes
 
 intents = discord.Intents.all()
 

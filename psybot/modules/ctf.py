@@ -8,10 +8,10 @@ import discord
 from discord import app_commands
 from discord import ui
 
-from database import db
-from config import config
-from ctftime import Ctftime
-from utils import move_channel, create_channel, delete_channel, MAX_CHANNELS
+from psybot.database import db
+from psybot.config import config
+from psybot.utils import move_channel, create_channel, delete_channel, MAX_CHANNELS
+from psybot.modules.ctftime import Ctftime
 
 
 async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] = False):

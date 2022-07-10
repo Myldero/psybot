@@ -5,10 +5,10 @@ from discord import app_commands
 import discord
 from pymongo.errors import DuplicateKeyError
 
-from config import config
-from database import db
-from ctf import category_autocomplete
-from utils import move_channel
+from psybot.config import config
+from psybot.database import db
+from psybot.utils import move_channel
+from psybot.modules.ctf import category_autocomplete
 
 
 async def check_challenge(interaction: discord.Interaction):
