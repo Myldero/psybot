@@ -31,7 +31,7 @@ class Config:
         self.mongodb_db = parse_variable("MONGODB_DB", str, default="psybot")
         self.ctftime_team = parse_variable("CTFTIME_TEAM", str)
         self.backups_dir = parse_variable("BACKUPS_DIR", str, default="../backups")
-        self.enforce_categories = parse_variable("ENFORCE_CATEGORIES", bool, default=False)
+        self.enforce_categories = parse_variable("ENFORCE_CATEGORIES", bool, default=True)
 
         # Discord ids. These can be supplied on first run, if they already exist
         self.team_role = parse_variable("TEAM_ROLE", int)
