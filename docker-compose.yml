@@ -6,6 +6,7 @@ services:
       - "BOT_TOKEN=${BOT_TOKEN}"
       - "GUILD_ID=${GUILD_ID}"
       - "CTFTIME_TEAM=${CTFTIME_TEAM}"
+      - "MONGODB_URI=mongo"
       - "MONGODB_DB=${MONGODB_DB:-psybot}"
       - "BACKUPS_DIR=/home/psybot/backups"
       - "ENFORCE_CATEGORIES=${ENFORCE_CATEGORIES}"

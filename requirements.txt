@@ -1,4 +1,4 @@
-git+https://github.com/Rapptz/discord.py@7ad0075
+git+https://github.com/Rapptz/discord.py@9fe19dcc
 tabulate~=0.8.9
 mongoengine~=0.24.1
 aiohttp~=3.8.1
