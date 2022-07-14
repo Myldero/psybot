@@ -4,3 +4,5 @@ mongoengine~=0.24.1
 aiohttp~=3.8.1
 beautifulsoup4~=4.11.1
 diff-match-patch
+pandas
+dataframe-image

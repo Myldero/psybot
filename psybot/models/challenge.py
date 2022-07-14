@@ -4,7 +4,7 @@ from psybot.models.ctf import Ctf
 
 
 class Working(EmbeddedDocument):
-    user = LongField(required=True, unique=True)
+    user = LongField(required=True)
     value = IntField(required=True)
 
 
