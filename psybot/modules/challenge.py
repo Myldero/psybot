@@ -145,6 +145,7 @@ class WorkingCommands(app_commands.Group):
     async def table(self, interaction: discord.Interaction):
         if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return
+        await interaction.response.defer(ephemeral=True)
         challs = sorted(Challenge.objects(ctf=ctf_db), key=lambda x: (x.category, x.name))
         tbl = {}
         for i, chall in enumerate(challs):
@@ -161,10 +162,9 @@ class WorkingCommands(app_commands.Group):
 
         df = pd.DataFrame(tbl, [chall.category + "-" + chall.name for chall in challs])
         df_styled = df.style.apply(set_style)
-        # df_styled = df.style.background_gradient(vmin=0, vmax=len(working_names)-1)
         filename = '/tmp/{}.png'.format(random.choice(string.ascii_letters) for _ in range(10))
         dfi.export(df_styled, filename)
-        await interaction.response.send_message(file=discord.File(filename, filename='overview.png'), ephemeral=True)
+        await interaction.edit_original_message(attachments=[discord.File(filename, filename='overview.png')])
         os.remove(filename)
 
 
