@@ -1,7 +1,6 @@
 import discord
 
-from psybot.database import db
-
+from psybot.models.backup_category import BackupCategory
 
 MAX_CHANNELS = 500
 CATEGORY_MAX_CHANNELS = 50
@@ -30,22 +29,23 @@ def get_category_pos(category_channel: discord.CategoryChannel, name: str):
 
 async def get_backup_category(original_category: discord.CategoryChannel):
     last_backup = None
-    async for cat in db.backup_category.find({'original_id': original_category.id}).sort('index', 1):
+    for cat in BackupCategory.objects(original_id=original_category.id).order_by('index'):
         last_backup = cat
         category = original_category.guild.get_channel(cat['category_id'])
         if len(category.channels) < CATEGORY_MAX_CHANNELS:
             return category
     idx = 2 if not last_backup else last_backup['index']+1
     new_category = await original_category.guild.create_category(f"{original_category.name} {idx}", position=original_category.position)
-    await db.backup_category.insert_one({'original_id': original_category.id, 'category_id': new_category.id, 'index': idx})
+    backup_category = BackupCategory(original_id=original_category.id, category_id=new_category.id, index=idx)
+    backup_category.save()
     return new_category
 
 
 async def free_backup_category(category: discord.CategoryChannel):
     if len(category.channels) == 0:
-        backup_category = await db.backup_category.find_one({'category_id': category.id})
+        backup_category = BackupCategory.objects(category_id=category.id).first()
         if backup_category is not None:
-            await db.backup_category.delete_one({'category_id': category.id})
+            backup_category.delete()
             await category.delete(reason="Removing unused backup category")
 
 

@@ -60,7 +60,7 @@ class Config:
             return guild.create_category_channel(name=name)
 
     async def setup_discord_ids(self, guild: discord.Guild, db):
-        ids = await db.discord_ids.find_one({'guild_id': guild.id})
+        ids = db.discord_ids.find_one({'guild_id': guild.id})
         ids = ids or {}
 
         discord_values = {
@@ -95,8 +95,8 @@ class Config:
             self.__dict__[key] = ids[key]
 
         # Save the ids in the database
-        if (await db.discord_ids.update_one({'guild_id': guild.id}, {'$set': ids})).matched_count == 0:
-            await db.discord_ids.insert_one(dict(guild_id=guild.id, **ids))
+        if (db.discord_ids.update_one({'guild_id': guild.id}, {'$set': ids})).matched_count == 0:
+            db.discord_ids.insert_one(dict(guild_id=guild.id, **ids))
 
 
 config = Config()

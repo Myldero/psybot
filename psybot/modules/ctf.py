@@ -8,21 +8,24 @@ import discord
 from discord import app_commands
 from discord import ui
 
-from psybot.database import db
 from psybot.config import config
+from psybot.models.ctf_category import CtfCategory
 from psybot.utils import move_channel, create_channel, delete_channel, MAX_CHANNELS
 from psybot.modules.ctftime import Ctftime
 
+from psybot.models.challenge import Challenge
+from psybot.models.ctf import Ctf
 
-async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] = False):
-    ctf_db = await db.ctf.find_one({'channel_id': interaction.channel.id})
+
+async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] = False) -> Optional[Ctf]:
+    ctf_db: Ctf = Ctf.objects(channel_id=interaction.channel.id).first()
     if ctf_db is None:
         await interaction.response.send_message("Not a CTF channel!", ephemeral=True)
         return None
-    if archived is False and ctf_db.get('archived'):
+    if archived is False and ctf_db.archived:
         await interaction.response.send_message("This CTF is archived!", ephemeral=True)
         return None
-    if archived is True and not ctf_db.get('archived'):
+    if archived is True and not ctf_db.archived:
         await interaction.response.send_message("This CTF is not archived!", ephemeral=True)
         return None
     return ctf_db
@@ -125,14 +128,7 @@ class CtfCommands(app_commands.Group):
         ctf_category = interaction.guild.get_channel(config.ctfs_category)
         new_channel = await create_channel(name, overwrites, ctf_category, challenge=False)
 
-        data = {
-            'name': name,
-            'channel_id': new_channel.id,
-            'role_id': new_role.id
-        }
-
         info = {'title': name}
-
         if ctftime:
             regex_ctftime = re.search(r'^(?:https?://ctftime.org/event/)?(\d+)/?$', ctftime)
             if regex_ctftime:
@@ -140,12 +136,13 @@ class CtfCommands(app_commands.Group):
                 ctf_info = await Ctftime.get_ctf_info(info['ctftime_id'])
                 info |= ctf_info
 
-        data['info'] = info
         info_msg = await new_channel.send(create_info_message(info))
-        data['info_msg'] = info_msg.id
+
         await info_msg.pin()
 
-        await db.ctf.insert_one(data)
+        ctf_db = Ctf(name=name, channel_id=new_channel.id, role_id=new_role.id, info=info, info_id=info_msg.id, private=private)
+        ctf_db.save()
+
         await interaction.response.send_message(f"Created ctf {new_channel.mention}")
 
     @app_commands.command(description="Update CTF information")
@@ -162,7 +159,7 @@ class CtfCommands(app_commands.Group):
             return
         if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return
-        info = ctf_db.get('info') or {}
+        info = ctf_db.info or {}
         if field == "start" or field == "end":
             if value.isdigit():
                 t = int(value)
@@ -186,8 +183,9 @@ class CtfCommands(app_commands.Group):
 
                 async def on_submit(self, submit_interaction: discord.Interaction):
                     info["creds"] = self.edit.value
-                    await db.ctf.update_one({'_id': ctf_db['_id']}, {'$set': {'info': info}})
-                    await interaction.channel.get_partial_message(ctf_db['info_msg']).edit(content=create_info_message(info))
+                    ctf_db.info = info
+                    ctf_db.save()
+                    await interaction.channel.get_partial_message(ctf_db.info_id).edit(content=create_info_message(info))
                     await submit_interaction.response.send_message("Updated info", ephemeral=True)
 
             await interaction.response.send_modal(CredsModal())
@@ -211,8 +209,9 @@ class CtfCommands(app_commands.Group):
             await interaction.response.send_message("Invalid field", ephemeral=True)
             return
 
-        await db.ctf.update_one({'_id': ctf_db['_id']}, {'$set': {'info': info}})
-        await interaction.channel.get_partial_message(ctf_db['info_msg']).edit(content=create_info_message(info))
+        ctf_db.info = info
+        ctf_db.save()
+        await interaction.channel.get_partial_message(ctf_db.info_id).edit(content=create_info_message(info))
         await interaction.response.send_message("Updated info", ephemeral=True)
 
     @app_commands.command(description="Archive a CTF")
@@ -224,15 +223,16 @@ class CtfCommands(app_commands.Group):
             return
         await interaction.response.defer()
 
-        async for chall in db.challenge.find({'ctf_id': ctf_db['_id']}):
-            channel = interaction.guild.get_channel(chall['channel_id'])
+        for chall in Challenge.objects(ctf=ctf_db):
+            channel = interaction.guild.get_channel(chall.channel_id)
             if channel:
                 await move_channel(channel, interaction.guild.get_channel(config.archive_category))
             else:
-                await db.challenge.delete_one({'_id': chall['_id']})
+                chall.delete()
 
         await move_channel(interaction.channel, interaction.guild.get_channel(config.ctf_archive_category), challenge=False)
-        await db.ctf.update_one({'_id': ctf_db['_id']}, {'$set': {'archived': True}})
+        ctf_db.archived = True
+        ctf_db.save()
         await interaction.edit_original_message(content="The CTF has been archived")
 
     @app_commands.command(description="Unarchive a CTF")
@@ -244,16 +244,17 @@ class CtfCommands(app_commands.Group):
             return
         await interaction.response.defer()
 
-        async for chall in db.challenge.find({'ctf_id': ctf_db['_id']}):
-            channel = interaction.guild.get_channel(chall['channel_id'])
-            target_category = config.complete_category if chall.get('contributors') else config.incomplete_category
+        for chall in Challenge.objects(ctf=ctf_db):
+            channel = interaction.guild.get_channel(chall.channel_id)
+            target_category = config.complete_category if chall.solved else config.incomplete_category
             if channel:
                 await move_channel(channel, interaction.guild.get_channel(target_category))
             else:
-                await db.challenge.delete_one({'_id': chall['_id']})
+                chall.delete()
 
         await move_channel(interaction.channel, interaction.guild.get_channel(config.ctfs_category), challenge=False)
-        await db.ctf.update_one({'_id': ctf_db['_id']}, {'$unset': {'archived': 1}})
+        ctf_db.archived = False
+        ctf_db.save()
         await interaction.edit_original_message(content="The CTF has been unarchived")
 
     @app_commands.command(description="Export an archived CTF")
@@ -268,18 +269,18 @@ class CtfCommands(app_commands.Group):
 
         channels = [interaction.channel]
 
-        async for chall in db.challenge.find({'ctf_id': ctf_db['_id']}):
-            channel = interaction.guild.get_channel(chall['channel_id'])
+        for chall in Challenge.objects(ctf=ctf_db):
+            channel = interaction.guild.get_channel(chall.channel_id)
             if channel:
                 channels.append(channel)
             else:
-                await db.challenge.delete_one({'_id': chall['_id']})
+                chall.delete()
 
         ctf_export = await export_channels(channels)
 
         if not os.path.exists(config.backups_dir):
             os.makedirs(config.backups_dir)
-        filepath = os.path.join(config.backups_dir, ctf_db["name"] + ".json")
+        filepath = os.path.join(config.backups_dir, ctf_db.name + ".json")
         with open(filepath, 'w') as f:
             f.write(json.dumps(ctf_export))
 
@@ -292,7 +293,7 @@ class CtfCommands(app_commands.Group):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
             await interaction.response.send_message("Only an admin can delete a CTF event", ephemeral=True)
             return
-        if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
+        if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         if security is None:
             await interaction.response.send_message("Please supply the security parameter \"{}\"".format(interaction.channel.name), ephemeral=True)
@@ -302,25 +303,25 @@ class CtfCommands(app_commands.Group):
             return
         await interaction.response.defer()
 
-        async for chall in db.challenge.find({'ctf_id': ctf_db['_id']}):
+        for chall in Challenge.objects(ctf=ctf_db):
             try:
-                await delete_channel(interaction.guild.get_channel(chall['channel_id']))
+                await delete_channel(interaction.guild.get_channel(chall.channel_id))
             except AttributeError:
                 pass
 
         try:
-            await interaction.guild.get_role(ctf_db['role_id']).delete(reason="Deleted CTF channels")
+            await interaction.guild.get_role(ctf_db.role_id).delete(reason="Deleted CTF channels")
         except AttributeError:
             pass
         await delete_channel(interaction.channel)
-        await db.challenge.delete_many({'ctf_id': ctf_db['_id']})
-        await db.ctf.delete_one({'_id': ctf_db['_id']})
+        Challenge.objects(ctf=ctf_db).delete()
+        ctf_db.delete()
 
 
 async def category_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     current = current.lower().replace(" ", "_").replace("-", "_")
-    query = db.ctf_category.find({'name': {'$regex': '^'+re.escape(current)}}).sort('count', -1).limit(25)
-    return [app_commands.Choice(name=c["name"], value=c["name"]) async for c in query]
+    query = CtfCategory.objects(name=re.compile("^" + re.escape(current))).order_by('-count')[:25]
+    return [app_commands.Choice(name=c["name"], value=c["name"]) for c in query]
 
 
 @app_commands.command(description="Add a challenge")
@@ -342,15 +343,21 @@ async def add(interaction: discord.Interaction, category: str, name: str):
     fullname = f"{ctf}-{category}-{name}"
 
     if config.enforce_categories:
-        if not await db.ctf_category.find_one({'name': category}):
+        if not CtfCategory.objects(name=category):
             await interaction.response.send_message("Invalid CTF category", ephemeral=True)
             return
 
     new_channel = await create_channel(fullname, interaction.channel.overwrites, incomplete_category)
 
-    await db.challenge.insert_one({'name': name, 'category': category, 'channel_id': new_channel.id, 'ctf_id': ctf_db['_id']})
-    if (await db.ctf_category.update_one({'name': category}, {'$inc': {'count': 1}})).matched_count == 0:
-        await db.ctf_category.insert_one({'name': category, 'count': 1})
+    chall_db = Challenge(name=name, category=category, channel_id=new_channel.id, ctf=ctf_db)
+    chall_db.save()
+
+    ctf_category = CtfCategory.objects(name=category).first()
+    if ctf_category is None:
+        ctf_category = CtfCategory(name=category, count=0)
+    ctf_category.count += 1
+    ctf_category.save()
+
     await interaction.response.send_message("Added challenge {}".format(new_channel.mention))
 
 
@@ -359,7 +366,7 @@ async def invite(interaction: discord.Interaction, user: discord.Member):
     if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
         return
 
-    await user.add_roles(interaction.guild.get_role(ctf_db['role_id']), reason="Invited to CTF")
+    await user.add_roles(interaction.guild.get_role(ctf_db.role_id), reason="Invited to CTF")
     await interaction.response.send_message("Invited user {}".format(user.mention))
 
 
