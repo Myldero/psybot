@@ -10,7 +10,7 @@ from psybot.models.ctf_category import CtfCategory
 from psybot.utils import move_channel
 from psybot.modules.ctf import category_autocomplete
 
-from psybot.models.challenge import Challenge
+from psybot.models.challenge import Challenge, Working
 from psybot.models.ctf import Ctf
 
 
@@ -95,7 +95,44 @@ class CategoryCommands(app_commands.Group):
             await interaction.response.send_message("Deleted CTF category", ephemeral=True)
 
 
+working_statuses = ["None", "Seen", "Worked", "Much Work"]
+
+
+class WorkingCommands(app_commands.Group):
+    @app_commands.command(description="Set working status on the challenge")
+    @app_commands.choices(value=[app_commands.Choice(name=name, value=i) for i, name in enumerate(working_statuses)])
+    async def set(self, interaction: discord.Interaction, value: int, user: Optional[discord.Member]):
+        chall_db, ctf_db = await check_challenge(interaction)
+        if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
+            return
+        if user is None:
+            user = interaction.user
+
+        if value == 0:
+            chall_db.working.filter(user=user.id).delete()
+        else:
+            work = chall_db.working.filter(user=user.id).first()
+            if work is None:
+                work = chall_db.working.create(user=user.id, value=value)
+            work.value = value
+        chall_db.save()
+        await interaction.response.send_message(f"Updated working status to {working_statuses[value]}", ephemeral=True)
+
+    @app_commands.command(description="Get list of people working on the challenge")
+    async def get(self, interaction: discord.Interaction):
+        chall_db, ctf_db = await check_challenge(interaction)
+        if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
+            return
+        out = ""
+        for work in sorted(chall_db.working, key=lambda x: -x.value):
+            user = interaction.guild.get_member(work.user)
+            out += f"{user.mention} {working_statuses[work.value]} ({work.value})\n"
+
+        await interaction.response.send_message(out if out else "Nobody is working on this", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+
 def add_commands(tree: app_commands.CommandTree):
     tree.add_command(done, guild=discord.Object(id=config.guild_id))
     tree.add_command(undone, guild=discord.Object(id=config.guild_id))
     tree.add_command(CategoryCommands(name="category"), guild=discord.Object(id=config.guild_id))
+    tree.add_command(WorkingCommands(name="working"), guild=discord.Object(id=config.guild_id))
