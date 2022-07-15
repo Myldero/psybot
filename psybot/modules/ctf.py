@@ -90,7 +90,7 @@ async def export_channels(channels: List[discord.TextChannel]):
 
 
 def create_info_message(info):
-    msg = info['title']
+    msg = discord.utils.escape_mentions(info['title'])
     if 'start' in info or 'end' in info:
         msg += "\n"
     if 'start' in info:
@@ -147,6 +147,7 @@ class CtfCommands(app_commands.Group):
 
     @app_commands.command(description="Update CTF information")
     @app_commands.choices(field=[
+        app_commands.Choice(name="title", value="title"),
         app_commands.Choice(name="start", value="start"),
         app_commands.Choice(name="end", value="end"),
         app_commands.Choice(name="url", value="url"),
@@ -160,7 +161,9 @@ class CtfCommands(app_commands.Group):
         if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         info = ctf_db.info or {}
-        if field == "start" or field == "end":
+        if field == "title":
+            info[field] = value.replace("\n", "")
+        elif field == "start" or field == "end":
             if value.isdigit():
                 t = int(value)
             else:
