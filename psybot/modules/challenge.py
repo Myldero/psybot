@@ -157,7 +157,7 @@ class WorkingCommands(app_commands.Group):
                 tbl[nm][i] = work.value
 
         if not tbl:
-            await interaction.response.send_message("No work has been done on any challenges yet", ephemeral=True)
+            await interaction.edit_original_message(content="No work has been done on any challenges yet")
             return
 
         df = pd.DataFrame(tbl, [chall.category + "-" + chall.name for chall in challs])
