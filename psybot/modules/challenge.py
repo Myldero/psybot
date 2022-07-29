@@ -146,7 +146,7 @@ class WorkingCommands(app_commands.Group):
         if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         await interaction.response.defer(ephemeral=True)
-        challs = sorted(Challenge.objects(ctf=ctf_db), key=lambda x: (x.category, x.name))
+        challs = sorted(Challenge.objects(ctf=ctf_db, solved=False), key=lambda x: (x.category, x.name))
         tbl = {}
         for i, chall in enumerate(challs):
             for work in chall.working:
