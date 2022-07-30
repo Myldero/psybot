@@ -100,12 +100,12 @@ class CategoryCommands(app_commands.Group):
             await interaction.response.send_message("Deleted CTF category", ephemeral=True)
 
 
-working_names = ["None", "Seen", "Worked", "Much Work"]
-working_colors = [("ffffff", "000000"), ("b4c4df", "000000"), ("2685bb", "f1f1f1"), ("023858", "f1f1f1")]
+working_names = ["None", "Working", "Has Worked"]
+working_colors = [("ffffff", "000000"), ("00b618", "f1f1f1"), ("ffab00", "f1f1f1")]
 
 
 def set_style(a):
-    return ['background-color: #{}; color: #{}'.format(*working_colors[i if i else 0]) for i in a]
+    return ['background-color: #{}; color: #{}'.format(*working_colors[i if i and 0 <= i < len(working_colors) else 0]) for i in a]
 
 
 class WorkingCommands(app_commands.Group):
@@ -142,11 +142,14 @@ class WorkingCommands(app_commands.Group):
                                                 allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(description="Get table of all work on challenges")
-    async def table(self, interaction: discord.Interaction):
+    async def table(self, interaction: discord.Interaction, all: bool = False):
         if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         await interaction.response.defer(ephemeral=True)
-        challs = sorted(Challenge.objects(ctf=ctf_db, solved=False), key=lambda x: (x.category, x.name))
+        if all:
+            challs = sorted(Challenge.objects(ctf=ctf_db), key=lambda x: (x.category, x.name))
+        else:
+            challs = sorted(Challenge.objects(ctf=ctf_db, solved=False), key=lambda x: (x.category, x.name))
         tbl = {}
         for i, chall in enumerate(challs):
             for work in chall.working:
