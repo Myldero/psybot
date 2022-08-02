@@ -108,6 +108,28 @@ def set_style(a):
     return ['background-color: #{}; color: #{}'.format(*working_colors[i if i and 0 <= i < len(working_colors) else 0]) for i in a]
 
 
+@app_commands.command(description="Shortcut to set working status on the challenge")
+async def w(interaction: discord.Interaction):
+    chall_db, ctf_db = await check_challenge(interaction)
+    if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
+        return
+    user = interaction.user
+    value = 1
+
+    for chall in Challenge.objects(ctf=ctf_db):
+        work = chall.working.filter(user=user.id).first()
+        if work is not None and work.value == 1:
+            work.value = 2
+        chall.save()
+    work = chall_db.working.filter(user=user.id).first()
+    if work is None:
+        work = chall_db.working.create(user=user.id, value=1)
+    work.value = value
+    chall_db.save()
+
+    await interaction.response.send_message(f"Updated working status to Working", ephemeral=True)
+
+
 class WorkingCommands(app_commands.Group):
     @app_commands.command(description="Set working status on the challenge")
     @app_commands.choices(value=[app_commands.Choice(name=name, value=i) for i, name in enumerate(working_names)])
@@ -142,11 +164,15 @@ class WorkingCommands(app_commands.Group):
                                                 allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(description="Get table of all work on challenges")
-    async def table(self, interaction: discord.Interaction, all: bool = False):
+    @app_commands.choices(filter=[
+        app_commands.Choice(name='all', value=0),
+        app_commands.Choice(name='current', value=1)
+    ])
+    async def table(self, interaction: discord.Interaction, filter: int = 1):
         if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         await interaction.response.defer(ephemeral=True)
-        if all:
+        if filter == 0:
             challs = sorted(Challenge.objects(ctf=ctf_db), key=lambda x: (x.category, x.name))
         else:
             challs = sorted(Challenge.objects(ctf=ctf_db, solved=False), key=lambda x: (x.category, x.name))
@@ -154,7 +180,7 @@ class WorkingCommands(app_commands.Group):
         for i, chall in enumerate(challs):
             for work in chall.working:
                 user = interaction.guild.get_member(work.user)
-                nm = f"{user.name}"
+                nm = f"{user.nick if user.nick else user.name}"
                 if nm not in tbl:
                     tbl[nm] = [''] * len(challs)
                 tbl[nm][i] = work.value
@@ -174,5 +200,6 @@ class WorkingCommands(app_commands.Group):
 def add_commands(tree: app_commands.CommandTree):
     tree.add_command(done, guild=discord.Object(id=config.guild_id))
     tree.add_command(undone, guild=discord.Object(id=config.guild_id))
+    tree.add_command(w, guild=discord.Object(id=config.guild_id))
     tree.add_command(CategoryCommands(name="category"), guild=discord.Object(id=config.guild_id))
     tree.add_command(WorkingCommands(name="working"), guild=discord.Object(id=config.guild_id))

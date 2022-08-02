@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import logging
 
 import discord
 import pymongo.errors
@@ -8,6 +9,8 @@ from discord import app_commands
 from psybot.modules import ctf, ctftime, challenge, notes
 from psybot.config import config
 from psybot.database import db
+
+logging.basicConfig(level=logging.INFO)
 
 intents = discord.Intents.all()
 

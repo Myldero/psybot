@@ -260,6 +260,32 @@ class CtfCommands(app_commands.Group):
         ctf_db.save()
         await interaction.edit_original_message(content="The CTF has been unarchived")
 
+    @app_commands.command(description="Rename a CTF and its channels")
+    async def rename(self, interaction: discord.Interaction, name: str):
+        if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
+            await interaction.response.send_message("Only an admin can archive a CTF event", ephemeral=True)
+            return
+        if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
+            return
+        await interaction.response.defer()
+
+        name = name.lower().replace(" ", "_").replace("-", "_")
+
+        if ctf_db.info.get('title') == ctf_db.name:
+            ctf_db.info['title'] = name
+        ctf_db.name = name
+        ctf_db.save()
+
+        await interaction.channel.edit(name=name)
+
+        for chall in Challenge.objects(ctf=ctf_db):
+            channel = interaction.guild.get_channel(chall.channel_id)
+            if channel:
+                await channel.edit(name=name + "-" + chall.category + "-" + chall.name)
+            else:
+                chall.delete()
+        await interaction.edit_original_message(content="The CTF has been renamed")
+
     @app_commands.command(description="Export an archived CTF")
     async def export(self, interaction: discord.Interaction):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
@@ -349,6 +375,13 @@ async def add(interaction: discord.Interaction, category: str, name: str):
         if not CtfCategory.objects(name=category):
             await interaction.response.send_message("Invalid CTF category", ephemeral=True)
             return
+
+    if old_chall := Challenge.objects(name=name, category=category, ctf=ctf_db).first():
+        if interaction.guild.get_channel(old_chall.channel_id):
+            await interaction.response.send_message("A challenge with that name already exists", ephemeral=True)
+            return
+        else:
+            old_chall.delete()
 
     new_channel = await create_channel(fullname, interaction.channel.overwrites, incomplete_category)
 
