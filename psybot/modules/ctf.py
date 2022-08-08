@@ -17,11 +17,14 @@ from psybot.models.challenge import Challenge
 from psybot.models.ctf import Ctf
 
 
-async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] = False) -> Optional[Ctf]:
+async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] = False, allow_chall: bool = True) -> Optional[Ctf]:
     ctf_db: Ctf = Ctf.objects(channel_id=interaction.channel.id).first()
     if ctf_db is None:
-        await interaction.response.send_message("Not a CTF channel!", ephemeral=True)
-        return None
+        chall_db: Challenge = Challenge.objects(channel_id=interaction.channel.id).first()
+        if not allow_chall or chall_db is None:
+            await interaction.response.send_message("Not a CTF channel!", ephemeral=True)
+            return None
+        ctf_db: Ctf = chall_db.ctf
     if archived is False and ctf_db.archived:
         await interaction.response.send_message("This CTF is archived!", ephemeral=True)
         return None
@@ -222,7 +225,7 @@ class CtfCommands(app_commands.Group):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
             await interaction.response.send_message("Only an admin can archive a CTF event", ephemeral=True)
             return
-        if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
+        if not (ctf_db := await get_ctf_db(interaction, allow_chall=False)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         await interaction.response.defer()
 
@@ -243,7 +246,7 @@ class CtfCommands(app_commands.Group):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
             await interaction.response.send_message("Only an admin can unarchive a CTF event", ephemeral=True)
             return
-        if not (ctf_db := await get_ctf_db(interaction, archived=True)) or not isinstance(interaction.channel, discord.TextChannel):
+        if not (ctf_db := await get_ctf_db(interaction, archived=True, allow_chall=False)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         await interaction.response.defer()
 
@@ -265,7 +268,7 @@ class CtfCommands(app_commands.Group):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
             await interaction.response.send_message("Only an admin can archive a CTF event", ephemeral=True)
             return
-        if not (ctf_db := await get_ctf_db(interaction)) or not isinstance(interaction.channel, discord.TextChannel):
+        if not (ctf_db := await get_ctf_db(interaction, allow_chall=False)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         await interaction.response.defer()
 
@@ -322,7 +325,7 @@ class CtfCommands(app_commands.Group):
         if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
             await interaction.response.send_message("Only an admin can delete a CTF event", ephemeral=True)
             return
-        if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
+        if not (ctf_db := await get_ctf_db(interaction, archived=None, allow_chall=False)) or not isinstance(interaction.channel, discord.TextChannel):
             return
         if security is None:
             await interaction.response.send_message("Please supply the security parameter \"{}\"".format(interaction.channel.name), ephemeral=True)
@@ -366,7 +369,7 @@ async def add(interaction: discord.Interaction, category: str, name: str):
         return
     incomplete_category = interaction.guild.get_channel(config.incomplete_category)
 
-    ctf = interaction.channel.name
+    ctf = ctf_db.name
     category = category.lower().replace(" ", "_").replace("-", "_")
     name = name.lower().replace(" ", "_").replace("-", "_")
     fullname = f"{ctf}-{category}-{name}"
