@@ -7,8 +7,8 @@ from typing import Optional, Tuple
 from discord import app_commands
 import discord
 from pymongo.errors import DuplicateKeyError
-import pandas as pd
-import dataframe_image as dfi
+import matplotlib.pyplot as plt
+from matplotlib.table import Table, Cell
 
 from psybot.config import config
 from psybot.models.ctf_category import CtfCategory
@@ -100,12 +100,37 @@ class CategoryCommands(app_commands.Group):
             await interaction.response.send_message("Deleted CTF category", ephemeral=True)
 
 
-working_names = ["None", "Working", "Has Worked"]
-working_colors = [("ffffff", "000000"), ("00b618", "f1f1f1"), ("ffab00", "f1f1f1")]
+WORKING_NAMES = ["None", "Working", "Has Worked"]
+WORKING_COLORS = ['#ffffff', '#00b618', '#ffab00']
+CELL_HEIGHT = 35 / 77
+CELL_WIDTH = 120 / 77
 
 
-def set_style(a):
-    return ['background-color: #{}; color: #{}'.format(*working_colors[i if i and 0 <= i < len(working_colors) else 0]) for i in a]
+def export_table(solves: dict, challs: list, filename: str):
+    height = len(challs)
+    width = len(solves)
+
+    fig, ax = plt.subplots(figsize=(width * CELL_WIDTH, height * CELL_HEIGHT))
+    ax.axis('off')
+    tbl = Table(ax, loc="center")
+
+    def add_cell(r, c, text=None, color='w', loc='center', edges='closed'):
+        tbl[r, c] = Cell((r, c), text=text, facecolor=color, edgecolor=color, width=1 / width, height=1 / height,
+                         loc=loc, visible_edges=edges)
+
+    for row, name in enumerate(challs):
+        add_cell(row + 1, 0, text=name, loc='left')
+
+    for col, name in enumerate(solves.keys()):
+        add_cell(0, col + 1, text=name, edges='B', color='black')
+        tbl[0, col + 1].auto_set_font_size(fig.canvas.get_renderer())
+        for row, val in enumerate(solves[name]):
+            color = WORKING_COLORS[val] if 0 <= val < len(WORKING_COLORS) else 'w'
+            add_cell(row + 1, col + 1, color=color)
+    tbl.auto_set_column_width(0)
+    tbl.auto_set_font_size(False)
+    ax.add_table(tbl)
+    plt.savefig(filename, bbox_inches='tight', pad_inches=0)
 
 
 @app_commands.command(description="Shortcut to set working status on the challenge")
@@ -132,7 +157,7 @@ async def w(interaction: discord.Interaction):
 
 class WorkingCommands(app_commands.Group):
     @app_commands.command(description="Set working status on the challenge")
-    @app_commands.choices(value=[app_commands.Choice(name=name, value=i) for i, name in enumerate(working_names)])
+    @app_commands.choices(value=[app_commands.Choice(name=name, value=i) for i, name in enumerate(WORKING_NAMES)])
     async def set(self, interaction: discord.Interaction, value: int, user: Optional[discord.Member]):
         chall_db, ctf_db = await check_challenge(interaction)
         if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
@@ -148,7 +173,7 @@ class WorkingCommands(app_commands.Group):
                 work = chall_db.working.create(user=user.id, value=value)
             work.value = value
         chall_db.save()
-        await interaction.response.send_message(f"Updated working status to {working_names[value]}", ephemeral=True)
+        await interaction.response.send_message(f"Updated working status to {WORKING_NAMES[value]}", ephemeral=True)
 
     @app_commands.command(description="Get list of people working on the challenge")
     async def get(self, interaction: discord.Interaction):
@@ -158,7 +183,7 @@ class WorkingCommands(app_commands.Group):
         out = ""
         for work in sorted(chall_db.working, key=lambda x: -x.value):
             user = interaction.guild.get_member(work.user)
-            out += f"{user.mention} {working_names[work.value]} ({work.value})\n"
+            out += f"{user.mention} {WORKING_NAMES[work.value]} ({work.value})\n"
 
         await interaction.response.send_message(out if out else "Nobody is working on this", ephemeral=True,
                                                 allowed_mentions=discord.AllowedMentions.none())
@@ -173,26 +198,25 @@ class WorkingCommands(app_commands.Group):
             return
         await interaction.response.defer(ephemeral=True)
         if filter == 0:
-            challs = sorted(Challenge.objects(ctf=ctf_db), key=lambda x: (x.category, x.name))
+            challs = Challenge.objects(ctf=ctf_db)
         else:
-            challs = sorted(Challenge.objects(ctf=ctf_db, solved=False), key=lambda x: (x.category, x.name))
+            challs = Challenge.objects(ctf=ctf_db, solved=False)
+        challs = sorted(challs, key=lambda x: (x.category, x.name))
         tbl = {}
         for i, chall in enumerate(challs):
             for work in chall.working:
                 user = interaction.guild.get_member(work.user)
                 nm = f"{user.nick if user.nick else user.name}"
                 if nm not in tbl:
-                    tbl[nm] = [''] * len(challs)
+                    tbl[nm] = [0] * len(challs)
                 tbl[nm][i] = work.value
 
         if not tbl:
             await interaction.edit_original_message(content="No work has been done on any challenges yet")
             return
 
-        df = pd.DataFrame(tbl, [chall.category + "-" + chall.name for chall in challs])
-        df_styled = df.style.apply(set_style)
         filename = '/tmp/{}.png'.format(random.choice(string.ascii_letters) for _ in range(10))
-        dfi.export(df_styled, filename)
+        export_table(tbl, [chall.category + "-" + chall.name for chall in challs], filename)
         await interaction.edit_original_message(attachments=[discord.File(filename, filename='overview.png')])
         os.remove(filename)
 
