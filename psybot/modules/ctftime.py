@@ -119,7 +119,7 @@ class Ctftime(app_commands.Group):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status != 200:
-                    await interaction.edit_original_message(content="Unknown team")
+                    await interaction.edit_original_response(content="Unknown team")
                     return
 
                 html = await response.text()
@@ -128,7 +128,7 @@ class Ctftime(app_commands.Group):
 
                 year_rating = soup.find(id=f'rating_{year}')
                 if year_rating is None:
-                    await interaction.edit_original_message(content="Invalid year")
+                    await interaction.edit_original_response(content="Invalid year")
                     return
                 headers, tbl = self.get_table_from_html(year_rating)
 
@@ -144,9 +144,9 @@ class Ctftime(app_commands.Group):
         out += '\n```\n'
 
         if len(out) > 2000:
-            await interaction.edit_original_message(content='Message is too long...')
+            await interaction.edit_original_response(content='Message is too long...')
             return
-        await interaction.edit_original_message(content=out)
+        await interaction.edit_original_response(content=out)
 
     @staticmethod
     async def get_team_id(team_name):

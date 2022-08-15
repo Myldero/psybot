@@ -103,7 +103,7 @@ class CategoryCommands(app_commands.Group):
 WORKING_NAMES = ["None", "Working", "Has Worked"]
 WORKING_COLORS = ['#ffffff', '#00b618', '#ffab00']
 CELL_HEIGHT = 35 / 77
-CELL_WIDTH = 120 / 77
+CELL_WIDTH = 100 / 77
 
 
 def export_table(solves: dict, challs: list, filename: str):
@@ -212,12 +212,12 @@ class WorkingCommands(app_commands.Group):
                 tbl[nm][i] = work.value
 
         if not tbl:
-            await interaction.edit_original_message(content="No work has been done on any challenges yet")
+            await interaction.edit_original_response(content="No work has been done on any challenges yet")
             return
 
         filename = '/tmp/{}.png'.format(random.choice(string.ascii_letters) for _ in range(10))
         export_table(tbl, [chall.category + "-" + chall.name for chall in challs], filename)
-        await interaction.edit_original_message(attachments=[discord.File(filename, filename='overview.png')])
+        await interaction.edit_original_response(attachments=[discord.File(filename, filename='overview.png')])
         os.remove(filename)
 
 

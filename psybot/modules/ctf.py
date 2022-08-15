@@ -239,7 +239,7 @@ class CtfCommands(app_commands.Group):
         await move_channel(interaction.channel, interaction.guild.get_channel(config.ctf_archive_category), challenge=False)
         ctf_db.archived = True
         ctf_db.save()
-        await interaction.edit_original_message(content="The CTF has been archived")
+        await interaction.edit_original_response(content="The CTF has been archived")
 
     @app_commands.command(description="Unarchive a CTF")
     async def unarchive(self, interaction: discord.Interaction):
@@ -261,7 +261,7 @@ class CtfCommands(app_commands.Group):
         await move_channel(interaction.channel, interaction.guild.get_channel(config.ctfs_category), challenge=False)
         ctf_db.archived = False
         ctf_db.save()
-        await interaction.edit_original_message(content="The CTF has been unarchived")
+        await interaction.edit_original_response(content="The CTF has been unarchived")
 
     @app_commands.command(description="Rename a CTF and its channels")
     async def rename(self, interaction: discord.Interaction, name: str):
@@ -287,7 +287,7 @@ class CtfCommands(app_commands.Group):
                 await channel.edit(name=name + "-" + chall.category + "-" + chall.name)
             else:
                 chall.delete()
-        await interaction.edit_original_message(content="The CTF has been renamed")
+        await interaction.edit_original_response(content="The CTF has been renamed")
 
     @app_commands.command(description="Export an archived CTF")
     async def export(self, interaction: discord.Interaction):
@@ -318,7 +318,7 @@ class CtfCommands(app_commands.Group):
 
         export_channel = interaction.guild.get_channel(config.export_channel)
         await export_channel.send(files=[discord.File(filepath)])
-        await interaction.edit_original_message(content=f"The CTF has been exported")
+        await interaction.edit_original_response(content=f"The CTF has been exported")
 
     @app_commands.command(description="Delete a CTF and its channels")
     async def delete(self, interaction: discord.Interaction, security: Optional[str]):

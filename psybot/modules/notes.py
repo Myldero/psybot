@@ -75,9 +75,9 @@ async def note(interaction: discord.Interaction, type: str = "doc"):
         async with aiohttp.ClientSession() as session:
             async with session.get(HEDGEDOC_URL + "/new") as response:
                 if response.status != 200:
-                    await interaction.edit_original_message(content="Could not create a HedgeDoc note")
+                    await interaction.edit_original_response(content="Could not create a HedgeDoc note")
                     return
-                await interaction.edit_original_message(embed=discord.Embed(title="note", description="", colour=0x00FFFF),
+                await interaction.edit_original_response(embed=discord.Embed(title="note", description="", colour=0x00FFFF),
                                                     view=HedgeDocNoteView(str(response.url) + "?edit"))
 
 
