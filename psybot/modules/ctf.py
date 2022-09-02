@@ -207,7 +207,8 @@ class CtfCommands(app_commands.Group):
             if regex_ctftime:
                 info['ctftime_id'] = int(regex_ctftime.group(1))
                 ctf_info = await Ctftime.get_ctf_info(info['ctftime_id'])
-                info |= ctf_info
+                for key, value in ctf_info.items():
+                    info[key] = value
             else:
                 await interaction.response.send_message("Invalid ctftime link", ephemeral=True)
                 return
