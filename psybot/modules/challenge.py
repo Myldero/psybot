@@ -133,6 +133,19 @@ def export_table(solves: dict, challs: list, filename: str):
     plt.savefig(filename, bbox_inches='tight', pad_inches=0)
 
 
+async def update_channel_topic(channel: discord.TextChannel, chall_db: Challenge):
+    arr = []
+    for value in range(1, len(WORKING_NAMES)):
+        names = []
+        for work in chall_db.working:
+            if work.value != value: continue
+            user = channel.guild.get_member(work.user)
+            names.append(f"{user.nick if user.nick else user.name}")
+        arr.append("{}: [{}]".format(WORKING_NAMES[value], ", ".join(names)))
+
+    await channel.edit(topic=", ".join(arr))
+
+
 @app_commands.command(description="Shortcut to set working status on the challenge")
 async def w(interaction: discord.Interaction):
     chall_db, ctf_db = await check_challenge(interaction)
@@ -146,13 +159,15 @@ async def w(interaction: discord.Interaction):
         if work is not None and work.value == 1:
             work.value = 2
         chall.save()
+        channel = interaction.guild.get_channel(chall.channel_id)
+        await update_channel_topic(channel, chall)
     work = chall_db.working.filter(user=user.id).first()
     if work is None:
         work = chall_db.working.create(user=user.id, value=1)
     work.value = value
     chall_db.save()
-
     await interaction.response.send_message(f"Updated working status to Working", ephemeral=True)
+    await update_channel_topic(interaction.channel, chall_db)
 
 
 class WorkingCommands(app_commands.Group):
@@ -174,6 +189,7 @@ class WorkingCommands(app_commands.Group):
             work.value = value
         chall_db.save()
         await interaction.response.send_message(f"Updated working status to {WORKING_NAMES[value]}", ephemeral=True)
+        await update_channel_topic(interaction.channel, chall_db)
 
     @app_commands.command(description="Get list of people working on the challenge")
     async def get(self, interaction: discord.Interaction):
