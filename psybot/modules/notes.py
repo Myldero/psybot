@@ -1,9 +1,12 @@
+import logging
+from typing import Optional
+
 import aiohttp
 import discord
 from diff_match_patch import diff_match_patch
 from discord import app_commands, ui
 
-from psybot.config import config
+from psybot.utils import get_settings
 
 
 class ModalNoteView(ui.View):
@@ -11,7 +14,7 @@ class ModalNoteView(ui.View):
         super().__init__(timeout=None)
 
     @ui.button(label="Edit", emoji="📝", style=discord.ButtonStyle.secondary, custom_id='modal_note:edit_note')
-    async def edit_note(self, interaction: discord.Interaction, button: ui.Button):
+    async def edit_note(self, interaction: discord.Interaction, _button: ui.Button):
         original = interaction.message.embeds[0].description
 
         class EditNoteModal(ui.Modal, title='Edit Note'):
@@ -33,7 +36,6 @@ class ModalNoteView(ui.View):
         await interaction.response.send_modal(EditNoteModal())
 
 
-HEDGEDOC_URL = "https://demo.hedgedoc.org"
 
 
 class HedgeDocNoteView(ui.View):
@@ -45,13 +47,13 @@ class HedgeDocNoteView(ui.View):
         self.add_item(children[0])
 
     @ui.button(label="Update", emoji="⌛", style=discord.ButtonStyle.secondary, custom_id='hedgedoc_note:update')
-    async def update(self, interaction: discord.Interaction, button: ui.Button):
+    async def update(self, interaction: discord.Interaction, _button: ui.Button):
         await interaction.response.defer()
         url = interaction.message.components[0].children[0].url.replace("?edit", "")
         async with aiohttp.ClientSession() as session:
             async with session.get(url + "/download") as response:
                 if response.status != 200:
-                    print("Something went wrong when downloading")
+                    logging.warning("Something went wrong when downloading")
                     return
                 new_description = (await response.text())[:4096]
 
@@ -72,8 +74,14 @@ async def note(interaction: discord.Interaction, type: str = "doc"):
                                             view=ModalNoteView())
     elif type == "doc":
         await interaction.response.defer()
+        hedgedoc_url = "https://demo.hedgedoc.org"
+        if interaction.guild is not None:
+            settings = get_settings(interaction.guild)
+            if settings.hedgedoc_url:
+                hedgedoc_url = settings.hedgedoc_url
+
         async with aiohttp.ClientSession() as session:
-            async with session.get(HEDGEDOC_URL + "/new") as response:
+            async with session.get(hedgedoc_url + "/new") as response:
                 if response.status != 200:
                     await interaction.edit_original_response(content="Could not create a HedgeDoc note")
                     return
@@ -81,5 +89,5 @@ async def note(interaction: discord.Interaction, type: str = "doc"):
                                                     view=HedgeDocNoteView(str(response.url) + "?edit"))
 
 
-def add_commands(tree: app_commands.CommandTree):
-    tree.add_command(note, guild=discord.Object(id=config.guild_id))
+def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
+    tree.add_command(note, guild=guild)

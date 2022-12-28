@@ -1,14 +1,14 @@
 import asyncio
-import sys
 import logging
 
 import discord
 import pymongo.errors
 from discord import app_commands
 
-from psybot.modules import ctf, ctftime, challenge, notes
+from psybot.modules import ctf, ctftime, challenge, notes, psybot
 from psybot.config import config
 from psybot.database import db
+from psybot.utils import setup_settings
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,10 +17,12 @@ intents = discord.Intents.all()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-challenge.add_commands(tree)
-ctf.add_commands(tree)
-ctftime.add_commands(tree)
-notes.add_commands(tree)
+guild_obj = discord.Object(id=config.guild_id) if config.guild_id else None
+challenge.add_commands(tree, guild_obj)
+ctf.add_commands(tree, guild_obj)
+ctftime.add_commands(tree, guild_obj)
+notes.add_commands(tree, guild_obj)
+psybot.add_commands(tree, guild_obj)
 
 
 @client.event
@@ -34,12 +36,36 @@ async def on_ready():
     try:
         db.command("ping")
     except pymongo.errors.ServerSelectionTimeoutError:
-        print("Could not connect to MongoDB", file=sys.stderr)
+        logging.critical("Could not connect to MongoDB")
         exit(1)
-    await config.setup_discord_ids(client.get_guild(config.guild_id), db)
-    await tree.sync(guild=discord.Object(config.guild_id))
-    # await tree.sync()  # Syncing global commands
-    print(f"{client.user.name} Online")
+    if config.guild_id:
+        await setup_settings(client.get_guild(config.guild_id))
+    else:
+        for guild in client.guilds:
+            await setup_settings(guild)
+
+    await tree.sync(guild=guild_obj)
+    logging.info(f"{client.user.name} Online")
+
+
+@client.event
+async def on_guild_join(guild: discord.Guild):
+    logging.info(f"{client.user.name} has joined guild \"{guild.name}\"")
+    await setup_settings(guild)
+
+
+@tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    try:
+        raise error
+    except app_commands.CommandInvokeError as e:
+        try:
+            raise e.original
+        except AssertionError:
+            await interaction.response.send_message("An assertion failed when running this command", ephemeral=True)
+    except app_commands.AppCommandError:
+        if error.args:
+            await interaction.response.send_message(error.args[0], ephemeral=True)
 
 
 async def main():

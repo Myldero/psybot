@@ -1,6 +1,8 @@
 import discord
+from discord import app_commands
 
 from psybot.models.backup_category import BackupCategory
+from psybot.models.guild_settings import GuildSettings
 
 MAX_CHANNELS = 500
 CATEGORY_MAX_CHANNELS = 50
@@ -81,3 +83,106 @@ async def move_channel(channel: discord.TextChannel, goal_category: discord.Cate
         await channel.edit(category=goal_category)
 
     await free_backup_category(original_category)
+
+
+async def is_team_admin(interaction: discord.Interaction) -> bool:
+    if not get_admin_role(interaction.guild) in interaction.user.roles:
+        raise app_commands.AppCommandError("Only team admins are allowed to run this command")
+    return True
+
+
+def _discord_get(guild: discord.Guild, value: int, id_type: str):
+    if id_type == "role":
+        return guild.get_role(value)
+    elif id_type == "channel" or id_type == "category":
+        return guild.get_channel(value)
+
+def _discord_find(guild: discord.Guild, name: str, id_type: str):
+    if id_type == "role":
+        return discord.utils.get(guild.roles, name=name)
+    elif id_type == "channel":
+        return discord.utils.get(guild.channels, name=name)
+    elif id_type == "category":
+        return discord.utils.get(guild.categories, name=name)
+
+def _discord_create(guild: discord.Guild, name: str, id_type: str):
+    if id_type == "role":
+        return guild.create_role(name=name)
+    elif id_type == "channel":
+        return guild.create_text_channel(name=name)
+    elif id_type == "category":
+        return guild.create_category_channel(name=name)
+
+async def setup_settings(guild: discord.Guild):
+    settings = GuildSettings.objects(guild_id=guild.id).first()
+    if settings is None:
+        settings = GuildSettings(guild_id=guild.id)
+
+    discord_values = {
+        "team_role": "Team Member",
+        "admin_role": "Team Admin",
+        "ctfs_category": "CTFS",
+        "incomplete_category": "INCOMPLETE CHALLENGES",
+        "complete_category": "COMPLETE CHALLENGES",
+        "archive_category": "ARCHIVE",
+        "ctf_archive_category": "ARCHIVED CTFS",
+        "export_channel": "export"
+    }
+    for key, name in discord_values.items():
+        key_type = key.rsplit("_", 1)[-1]
+        if getattr(settings, key) and _discord_get(guild, getattr(settings, key), key_type):
+            continue
+        existing = _discord_find(guild, name, key_type)
+        if existing:
+            setattr(settings, key, existing.id)
+            continue
+        new_id = (await _discord_create(guild, name, key_type)).id
+        setattr(settings, key, new_id)
+    settings.save()
+
+def get_settings(guild: discord.Guild) -> GuildSettings:
+    if guild is None:
+        raise app_commands.AppCommandError("You must run this command in a guild")
+    settings = GuildSettings.objects(guild_id=guild.id).first()
+    if settings is None:
+        raise app_commands.AppCommandError("Settings have not been set up correctly for this guild. "
+                                           "Please remove and re-invite the bot to fix this.")
+    return settings
+
+
+def get_admin_role(guild: discord.Guild) -> discord.Role:
+    settings = get_settings(guild)
+    admin_role = guild.get_role(settings.admin_role)
+    if admin_role is None:
+        raise app_commands.AppCommandError("Admin role missing. Please re-invite the bot to fix this.")
+    return admin_role
+
+
+def get_team_role(guild: discord.Guild) -> discord.Role:
+    settings = get_settings(guild)
+    team_role = guild.get_role(settings.team_role)
+    if team_role is None:
+        raise app_commands.AppCommandError("Team role missing. Fix this with /psybot set team_role")
+    return team_role
+
+
+def get_export_channel(guild: discord.Guild) -> discord.TextChannel:
+    settings = get_settings(guild)
+    export_channel = guild.get_channel(settings.export_channel)
+    if export_channel is None:
+        raise app_commands.AppCommandError("Export channel missing. Fix this with /psybot set {}".format(export_channel))
+    return export_channel
+
+
+def _get_category(guild: discord.Guild, category_name: str) -> discord.CategoryChannel:
+    settings = get_settings(guild)
+    category = guild.get_channel(getattr(settings, category_name))
+    if category is None:
+        raise app_commands.AppCommandError("'{0}' category missing. Fix this with /psybot set {0}".format(category_name))
+    return category
+
+get_ctfs_category = lambda g: _get_category(g, 'ctfs_category')
+get_incomplete_category = lambda g: _get_category(g, 'incomplete_category')
+get_complete_category = lambda g: _get_category(g, 'complete_category')
+get_archive_category = lambda g: _get_category(g, 'archive_category')
+get_ctf_archive_category = lambda g: _get_category(g, 'ctf_archive_category')

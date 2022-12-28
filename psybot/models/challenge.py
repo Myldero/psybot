@@ -16,3 +16,11 @@ class Challenge(Document):
     solvers = ListField(LongField(), default=[])
     working = EmbeddedDocumentListField(Working)
     solved = BooleanField(required=True, default=False)
+    meta = {
+        'indexes': [
+            {
+                'fields': ['channel_id'],
+                'unique': True
+            }
+        ]
+    }

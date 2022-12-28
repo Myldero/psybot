@@ -9,3 +9,11 @@ class Ctf(Document):
     info_id = LongField(required=True)
     private = BooleanField(required=True)
     archived = BooleanField(required=True, default=False)
+    meta = {
+        'indexes': [
+            {
+                'fields': ['channel_id'],
+                'unique': True
+            }
+        ]
+    }

@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 import datetime
 from tabulate import tabulate
 
-from psybot.config import config
+from psybot.utils import get_settings
 
 
 class Ctftime(app_commands.Group):
@@ -60,14 +60,12 @@ class Ctftime(app_commands.Group):
     async def top(self, interaction: discord.Interaction, country: str = "", year: int = datetime.datetime.now().year):
         year = self.check_year(year)
         if year is None:
-            await interaction.response.send_message("Invalid year")
-            return
+            raise app_commands.AppCommandError("Invalid year")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://ctftime.org/stats/{year}/{country.upper()}') as response:
                 if response.status != 200:
-                    await interaction.response.send_message("Unknown country")
-                    return
+                    raise app_commands.AppCommandError("Unknown country")
 
                 html = await response.text()
                 soup = BeautifulSoup(html, 'html.parser')
@@ -96,18 +94,18 @@ class Ctftime(app_commands.Group):
 
     @app_commands.command(description="Show top 10 events for a team")
     async def team(self, interaction: discord.Interaction, team: Optional[str], year: int = datetime.datetime.now().year):
-        # TODO: Get current team when available
         year = self.check_year(year)
         if year is None:
-            await interaction.response.send_message("Invalid year")
-            return
+            raise app_commands.AppCommandError("Invalid year")
 
         if team is None:
-            if config.ctftime_team is None:
-                await interaction.response.send_message("Please specify team")
-                return
-            else:
-                team = config.ctftime_team
+            if interaction.guild is None:
+                raise app_commands.AppCommandError("Please specify team")
+
+            settings = get_settings(interaction.guild)
+            if not settings.ctftime_team:
+                raise app_commands.AppCommandError("Please specify team")
+            team = settings.ctftime_team
 
         await interaction.response.defer()
 
@@ -162,5 +160,5 @@ class Ctftime(app_commands.Group):
                     return None
 
 
-def add_commands(tree: app_commands.CommandTree):
-    tree.add_command(Ctftime(), guild=discord.Object(id=config.guild_id))
+def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
+    tree.add_command(Ctftime(), guild=guild)

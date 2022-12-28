@@ -6,13 +6,12 @@ from typing import Optional, Tuple
 
 from discord import app_commands
 import discord
-from pymongo.errors import DuplicateKeyError
+from mongoengine import NotUniqueError
 import matplotlib.pyplot as plt
 from matplotlib.table import Table, Cell
 
-from psybot.config import config
 from psybot.models.ctf_category import CtfCategory
-from psybot.utils import move_channel
+from psybot.utils import move_channel, is_team_admin, get_incomplete_category, get_complete_category
 from psybot.modules.ctf import category_autocomplete, get_ctf_db
 
 from psybot.models.challenge import Challenge, Working
@@ -20,22 +19,20 @@ from psybot.models.ctf import Ctf
 
 
 async def check_challenge(interaction: discord.Interaction) -> Tuple[Optional[Challenge], Optional[Ctf]]:
-    chall_db: Challenge = Challenge.objects(channel_id=interaction.channel.id).first()
-    if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
-        await interaction.response.send_message("Not a challenge!", ephemeral=True)
-        return None, None
+    chall_db: Challenge = Challenge.objects(channel_id=interaction.channel_id).first()
+    if chall_db is None:
+        raise app_commands.AppCommandError("Not a challenge!")
     ctf_db: Ctf = chall_db.ctf
     if ctf_db.archived:
-        await interaction.response.send_message("This CTF is archived!", ephemeral=True)
-        return None, None
+        raise app_commands.AppCommandError("This CTF is archived!")
     return chall_db, ctf_db
 
 
 @app_commands.command(description="Marks a challenge as done")
+@app_commands.guild_only
 async def done(interaction: discord.Interaction, contributors: Optional[str]):
     chall_db, ctf_db = await check_challenge(interaction)
-    if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
-        return
+    assert isinstance(interaction.channel, discord.TextChannel)
 
     users = chall_db.solvers
     if interaction.user.id not in users:
@@ -49,7 +46,7 @@ async def done(interaction: discord.Interaction, contributors: Optional[str]):
     chall_db.solved = True
     chall_db.save()
 
-    await move_channel(interaction.channel, interaction.guild.get_channel(config.complete_category))
+    await move_channel(interaction.channel, get_complete_category(interaction.guild))
 
     msg = ":tada: {} was solved by ".format(interaction.channel.mention) + " ".join(f"<@!{user}>" for user in users) + " !"
     await interaction.guild.get_channel(ctf_db.channel_id).send(msg)
@@ -57,42 +54,41 @@ async def done(interaction: discord.Interaction, contributors: Optional[str]):
 
 
 @app_commands.command(description="Marks a challenge as undone")
+@app_commands.guild_only
 async def undone(interaction: discord.Interaction):
     chall_db, ctf_db = await check_challenge(interaction)
-    if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
-        return
+    assert isinstance(interaction.channel, discord.TextChannel)
 
     if not chall_db.solved:
-        await interaction.response.send_message("This challenge is not done yet!", ephemeral=True)
-        return
+        raise app_commands.AppCommandError("This challenge is not done yet!")
 
     chall_db.solvers = []
     chall_db.solved = False
     chall_db.save()
 
-    await move_channel(interaction.channel, interaction.guild.get_channel(config.incomplete_category))
+    await move_channel(interaction.channel, get_incomplete_category(interaction.guild))
     await interaction.response.send_message("Reopened challenge as not done")
 
 
 class CategoryCommands(app_commands.Group):
 
     @app_commands.command(description="Create CTF category suggestion")
+    @app_commands.guild_only
     async def create(self, interaction: discord.Interaction, category: str):
         try:
-            ctf_category = CtfCategory(name=category, count=5)
+            ctf_category = CtfCategory(name=category, guild_id=interaction.guild_id, count=5)
             ctf_category.save()
-        except DuplicateKeyError:
+        except NotUniqueError:
             await interaction.response.send_message("CTF category already exists", ephemeral=True)
         else:
             await interaction.response.send_message("Created CTF category", ephemeral=True)
 
     @app_commands.command(description="Delete CTF category suggestion")
     @app_commands.autocomplete(category=category_autocomplete)
+    @app_commands.guild_only
+    @app_commands.check(is_team_admin)
     async def delete(self, interaction: discord.Interaction, category: str):
-        if not interaction.guild.get_role(config.admin_role) in interaction.user.roles:
-            await interaction.response.send_message("Only an admin can delete categories", ephemeral=True)
-            return
-        ctf_category: CtfCategory = CtfCategory.objects(name=category).first()
+        ctf_category: CtfCategory = CtfCategory.objects(name=category, guild_id=interaction.guild_id).first()
         if ctf_category is None:
             await interaction.response.send_message("Unknown CTF category", ephemeral=True)
         else:
@@ -134,23 +130,27 @@ def export_table(solves: dict, challs: list, filename: str):
 
 
 @app_commands.command(description="Shortcut to set working status on the challenge")
+@app_commands.guild_only
 async def w(interaction: discord.Interaction):
     chall_db, ctf_db = await check_challenge(interaction)
-    if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
-        return
+    assert isinstance(interaction.channel, discord.TextChannel)
+
     user = interaction.user
     value = 1
 
     for chall in Challenge.objects(ctf=ctf_db):
+        if chall.id == chall_db.id:
+            continue
         work = chall.working.filter(user=user.id).first()
         if work is not None and work.value == 1:
             work.value = 2
-        chall.save()
-        channel = interaction.guild.get_channel(chall.channel_id)
+            chall.working.save()
+            chall.save()
     work = chall_db.working.filter(user=user.id).first()
     if work is None:
         work = chall_db.working.create(user=user.id, value=1)
     work.value = value
+    chall_db.working.save()
     chall_db.save()
     await interaction.response.send_message(f"Updated working status to Working", ephemeral=True)
 
@@ -158,10 +158,11 @@ async def w(interaction: discord.Interaction):
 class WorkingCommands(app_commands.Group):
     @app_commands.command(description="Set working status on the challenge")
     @app_commands.choices(value=[app_commands.Choice(name=name, value=i) for i, name in enumerate(WORKING_NAMES)])
+    @app_commands.guild_only
     async def set(self, interaction: discord.Interaction, value: int, user: Optional[discord.Member]):
         chall_db, ctf_db = await check_challenge(interaction)
-        if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
-            return
+        assert isinstance(interaction.channel, discord.TextChannel)
+
         if user is None:
             user = interaction.user
 
@@ -176,10 +177,11 @@ class WorkingCommands(app_commands.Group):
         await interaction.response.send_message(f"Updated working status to {WORKING_NAMES[value]}", ephemeral=True)
 
     @app_commands.command(description="Get list of people working on the challenge")
+    @app_commands.guild_only
     async def get(self, interaction: discord.Interaction):
         chall_db, ctf_db = await check_challenge(interaction)
-        if chall_db is None or not isinstance(interaction.channel, discord.TextChannel):
-            return
+        assert isinstance(interaction.channel, discord.TextChannel)
+
         out = ""
         for work in sorted(chall_db.working, key=lambda x: -x.value):
             user = interaction.guild.get_member(work.user)
@@ -193,9 +195,11 @@ class WorkingCommands(app_commands.Group):
         app_commands.Choice(name='all', value=0),
         app_commands.Choice(name='current', value=1)
     ])
+    @app_commands.guild_only
     async def table(self, interaction: discord.Interaction, filter: int = 1):
-        if not (ctf_db := await get_ctf_db(interaction, archived=None)) or not isinstance(interaction.channel, discord.TextChannel):
-            return
+        ctf_db = await get_ctf_db(interaction, archived=None)
+        assert isinstance(interaction.channel, discord.TextChannel)
+
         await interaction.response.defer(ephemeral=True)
         if filter == 0:
             challs = Challenge.objects(ctf=ctf_db)
@@ -221,9 +225,9 @@ class WorkingCommands(app_commands.Group):
         os.remove(filename)
 
 
-def add_commands(tree: app_commands.CommandTree):
-    tree.add_command(done, guild=discord.Object(id=config.guild_id))
-    tree.add_command(undone, guild=discord.Object(id=config.guild_id))
-    tree.add_command(w, guild=discord.Object(id=config.guild_id))
-    tree.add_command(CategoryCommands(name="category"), guild=discord.Object(id=config.guild_id))
-    tree.add_command(WorkingCommands(name="working"), guild=discord.Object(id=config.guild_id))
+def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
+    tree.add_command(done, guild=guild)
+    tree.add_command(undone, guild=guild)
+    tree.add_command(w, guild=guild)
+    tree.add_command(CategoryCommands(name="category"), guild=guild)
+    tree.add_command(WorkingCommands(name="working"), guild=guild)

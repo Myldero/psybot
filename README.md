@@ -1,2 +1,2 @@
 # PsyBot
-An almost complete rewrite of [fiskebot](https://github.com/ekofiskctf/fiskebot) with slash-commands, bug fixes, and new cool features
+A discord bot that provides tools for collaboration in CTFs. Inspired by [fiskebot](https://github.com/ekofiskctf/fiskebot)
