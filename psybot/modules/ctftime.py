@@ -62,6 +62,9 @@ class Ctftime(app_commands.Group):
         if year is None:
             raise app_commands.AppCommandError("Invalid year")
 
+        if country and (len(country) != 2 or not country.isalpha()):
+            raise app_commands.AppCommandError("Invalid country. Use the alpha-2 country code")
+
         async with aiohttp.ClientSession() as session:
             async with session.get(f'https://ctftime.org/stats/{year}/{country.upper()}') as response:
                 if response.status != 200:

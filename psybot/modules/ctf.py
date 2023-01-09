@@ -111,8 +111,7 @@ class CtfCommands(app_commands.Group):
     async def create(self, interaction: discord.Interaction, name: str, ctftime: Optional[str], private: bool = False):
         if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
             raise app_commands.AppCommandError("There are too many channels on this discord server")
-
-        name = name.lower().replace(" ", "_").replace("-", "_")
+        name = sanitize_channel_name(name)
 
         new_role = await interaction.guild.create_role(name=name + "-team")
         overwrites = {
@@ -264,7 +263,7 @@ class CtfCommands(app_commands.Group):
 
         await interaction.response.defer()
 
-        name = name.lower().replace(" ", "_").replace("-", "_")
+        name = sanitize_channel_name(name)
 
         if ctf_db.info.get('title') == ctf_db.name:
             ctf_db.info['title'] = name
@@ -276,7 +275,7 @@ class CtfCommands(app_commands.Group):
         for chall in Challenge.objects(ctf=ctf_db):
             channel = interaction.guild.get_channel(chall.channel_id)
             if channel:
-                await channel.edit(name=name + "-" + chall.category + "-" + chall.name)
+                await channel.edit(name=f"{name}-{chall.category}-{chall.name}")
             else:
                 chall.delete()
         await interaction.edit_original_response(content="The CTF has been renamed")
@@ -348,7 +347,7 @@ class CtfCommands(app_commands.Group):
 
 
 async def category_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-    current = current.lower().replace(" ", "_").replace("-", "_")
+    current = sanitize_channel_name(current)
     query = CtfCategory.objects(name=re.compile("^" + re.escape(current)), guild_id=interaction.guild_id).order_by('-count')[:25]
     return [app_commands.Choice(name=c["name"], value=c["name"]) for c in query]
 
@@ -368,9 +367,9 @@ async def add(interaction: discord.Interaction, category: str, name: str):
         return
     incomplete_category = get_incomplete_category(interaction.guild)
 
-    ctf = ctf_db.name
-    category = category.lower().replace(" ", "_").replace("-", "_")
-    name = name.lower().replace(" ", "_").replace("-", "_")
+    ctf = sanitize_channel_name(ctf_db.name)
+    category = sanitize_channel_name(category)
+    name = sanitize_channel_name(name)
     fullname = f"{ctf}-{category}-{name}"
 
     settings = get_settings(interaction.guild)

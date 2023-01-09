@@ -91,6 +91,13 @@ async def is_team_admin(interaction: discord.Interaction) -> bool:
     return True
 
 
+_channel_name_translation = {ord(i): '' for i in '''!"#$%&'()*+,./:;<=>?@[\\]^`{|}~'''}
+_channel_name_translation[ord(' ')] = '_'
+_channel_name_translation[ord('-')] = '_'
+def sanitize_channel_name(name: str) -> str:
+    return name.translate(_channel_name_translation).lower()
+
+
 def _discord_get(guild: discord.Guild, value: int, id_type: str):
     if id_type == "role":
         return guild.get_role(value)

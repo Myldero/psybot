@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 from matplotlib.table import Table, Cell
 
 from psybot.models.ctf_category import CtfCategory
-from psybot.utils import move_channel, is_team_admin, get_incomplete_category, get_complete_category
+from psybot.utils import move_channel, is_team_admin, get_incomplete_category, get_complete_category, sanitize_channel_name
 from psybot.modules.ctf import category_autocomplete, get_ctf_db
 
-from psybot.models.challenge import Challenge, Working
+from psybot.models.challenge import Challenge
 from psybot.models.ctf import Ctf
 
 
@@ -75,6 +75,7 @@ class CategoryCommands(app_commands.Group):
     @app_commands.command(description="Create CTF category suggestion")
     @app_commands.guild_only
     async def create(self, interaction: discord.Interaction, category: str):
+        category = sanitize_channel_name(category)
         try:
             ctf_category = CtfCategory(name=category, guild_id=interaction.guild_id, count=5)
             ctf_category.save()
