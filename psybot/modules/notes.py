@@ -1,3 +1,4 @@
+import datetime
 import logging
 from typing import Optional
 
@@ -8,6 +9,8 @@ from discord import app_commands, ui
 
 from psybot.utils import get_settings
 
+MODAL_NOTE_COLOR = 0x202222
+HEDGEDOC_NOTE_COLOR = 0xA84300
 
 class ModalNoteView(ui.View):
     def __init__(self):
@@ -27,15 +30,27 @@ class ModalNoteView(ui.View):
                 new_message = await interaction.message.fetch()
                 result, success = dmp.patch_apply(patches, new_message.embeds[0].description)
 
-                await interaction.message.delete()
-                await interaction.channel.send(
-                    embed=discord.Embed(title="note", description=result, colour=0x00FFFF),
-                    view=ModalNoteView())
+                await interaction.message.edit(embed=discord.Embed(title="note", description=result, colour=MODAL_NOTE_COLOR, timestamp=datetime.datetime.now()))
                 await submit_interaction.response.defer()
 
         await interaction.response.send_modal(EditNoteModal())
 
+    @ui.button(label="Pin/Unpin", emoji="📌", style=discord.ButtonStyle.secondary, custom_id='modal_note:toggle_pin')
+    async def toggle_pin(self, interaction: discord.Interaction, _button: ui.Button):
+        if interaction.message.pinned:
+            await interaction.message.unpin()
+        else:
+            await interaction.message.pin()
+        await interaction.response.defer()
 
+    @ui.button(label="Move Down", emoji="⏬", style=discord.ButtonStyle.secondary, custom_id='modal_note:move_down')
+    async def move_down(self, interaction: discord.Interaction, _button: ui.Button):
+        is_pinned = interaction.message.pinned
+        embeds = interaction.message.embeds
+        await interaction.message.delete()
+        new_message = await interaction.channel.send(embeds=embeds, view=ModalNoteView())
+        if is_pinned:
+            await new_message.pin()
 
 
 class HedgeDocNoteView(ui.View):
@@ -44,7 +59,8 @@ class HedgeDocNoteView(ui.View):
         children = self.children
         self.clear_items()
         self.add_item(ui.Button(label="Edit", emoji="📝", style=discord.ButtonStyle.secondary, url=url))
-        self.add_item(children[0])
+        for i in children:
+            self.add_item(i)
 
     @ui.button(label="Update", emoji="⌛", style=discord.ButtonStyle.secondary, custom_id='hedgedoc_note:update')
     async def update(self, interaction: discord.Interaction, _button: ui.Button):
@@ -57,10 +73,25 @@ class HedgeDocNoteView(ui.View):
                     return
                 new_description = (await response.text())[:4096]
 
-                await interaction.message.delete()
-                await interaction.channel.send(
-                    embed=discord.Embed(title="note", description=new_description, colour=0x00FFFF),
-                    view=HedgeDocNoteView(url + "?edit"))
+                await interaction.message.edit(embed=discord.Embed(title="note", description=new_description, colour=HEDGEDOC_NOTE_COLOR, timestamp=datetime.datetime.now()))
+
+    @ui.button(label="Pin/Unpin", emoji="📌", style=discord.ButtonStyle.secondary, custom_id='hedgedoc_note:toggle_pin')
+    async def toggle_pin(self, interaction: discord.Interaction, _button: ui.Button):
+        if interaction.message.pinned:
+            await interaction.message.unpin()
+        else:
+            await interaction.message.pin()
+        await interaction.response.defer()
+
+    @ui.button(label="Move Down", emoji="⏬", style=discord.ButtonStyle.secondary, custom_id='hedgedoc_note:move_down')
+    async def move_down(self, interaction: discord.Interaction, _button: ui.Button):
+        is_pinned = interaction.message.pinned
+        embeds = interaction.message.embeds
+        url = interaction.message.components[0].children[0].url
+        await interaction.message.delete()
+        new_message = await interaction.channel.send(embeds=embeds, view=HedgeDocNoteView(url))
+        if is_pinned:
+            await new_message.pin()
 
 
 @app_commands.command(description="Creates a new note")
@@ -70,7 +101,7 @@ class HedgeDocNoteView(ui.View):
 ])
 async def note(interaction: discord.Interaction, type: str = "doc"):
     if type == "modal":
-        await interaction.response.send_message(embed=discord.Embed(title="note", description="note goes here", colour=0x00FFFF),
+        await interaction.response.send_message(embed=discord.Embed(title="note", description="note goes here", colour=MODAL_NOTE_COLOR, timestamp=datetime.datetime.now()),
                                             view=ModalNoteView())
     elif type == "doc":
         await interaction.response.defer()
@@ -85,7 +116,7 @@ async def note(interaction: discord.Interaction, type: str = "doc"):
                 if response.status != 200:
                     await interaction.edit_original_response(content="Could not create a HedgeDoc note")
                     return
-                await interaction.edit_original_response(embed=discord.Embed(title="note", description="", colour=0x00FFFF),
+                await interaction.edit_original_response(embed=discord.Embed(title="note", description="", colour=HEDGEDOC_NOTE_COLOR, timestamp=datetime.datetime.now()),
                                                     view=HedgeDocNoteView(str(response.url) + "?edit"))
 
 
