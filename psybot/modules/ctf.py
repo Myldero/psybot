@@ -275,7 +275,10 @@ class CtfCommands(app_commands.Group):
         for chall in Challenge.objects(ctf=ctf_db):
             channel = interaction.guild.get_channel(chall.channel_id)
             if channel:
-                await channel.edit(name=f"{name}-{chall.category}-{chall.name}")
+                if chall.category:
+                    await channel.edit(name=f"{name}-{chall.category}-{chall.name}")
+                else:
+                    await channel.edit(name=f"{name}-{chall.name}")
             else:
                 chall.delete()
         await interaction.edit_original_response(content="The CTF has been renamed")
@@ -352,8 +355,15 @@ async def category_autocomplete(interaction: discord.Interaction, current: str) 
     return [app_commands.Choice(name=c["name"], value=c["name"]) for c in query]
 
 
+async def category_autocomplete_nullable(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    out = await category_autocomplete(interaction, current)
+    if len(out) < 25 and "none".startswith(current):
+        out.append(app_commands.Choice(name='None', value=''))
+    return out
+
+
 @app_commands.command(description="Add a challenge")
-@app_commands.autocomplete(category=category_autocomplete)
+@app_commands.autocomplete(category=category_autocomplete_nullable)
 @app_commands.guild_only
 async def add(interaction: discord.Interaction, category: str, name: str):
     ctf_db = await get_ctf_db(interaction)
@@ -368,13 +378,18 @@ async def add(interaction: discord.Interaction, category: str, name: str):
     incomplete_category = get_incomplete_category(interaction.guild)
 
     ctf = sanitize_channel_name(ctf_db.name)
-    category = sanitize_channel_name(category)
     name = sanitize_channel_name(name)
-    fullname = f"{ctf}-{category}-{name}"
+
+    if category:
+        category = sanitize_channel_name(category)
+        fullname = f"{ctf}-{category}-{name}"
+    else:
+        category = None
+        fullname = f"{ctf}-{name}"
 
     settings = get_settings(interaction.guild)
     if settings.enforce_categories:
-        if not CtfCategory.objects(name=category, guild_id=interaction.guild_id):
+        if category is not None and not CtfCategory.objects(name=category, guild_id=interaction.guild_id):
             raise app_commands.AppCommandError("Invalid CTF category")
 
     if old_chall := Challenge.objects(name=name, category=category, ctf=ctf_db).first():
@@ -388,11 +403,12 @@ async def add(interaction: discord.Interaction, category: str, name: str):
     chall_db = Challenge(name=name, category=category, channel_id=new_channel.id, ctf=ctf_db)
     chall_db.save()
 
-    ctf_category = CtfCategory.objects(name=category, guild_id=interaction.guild_id).first()
-    if ctf_category is None:
-        ctf_category = CtfCategory(name=category, guild_id=interaction.guild_id, count=0)
-    ctf_category.count += 1
-    ctf_category.save()
+    if category:
+        ctf_category = CtfCategory.objects(name=category, guild_id=interaction.guild_id).first()
+        if ctf_category is None:
+            ctf_category = CtfCategory(name=category, guild_id=interaction.guild_id, count=0)
+        ctf_category.count += 1
+        ctf_category.save()
 
     await interaction.response.send_message("Added challenge {}".format(new_channel.mention))
 

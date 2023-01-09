@@ -206,7 +206,7 @@ class WorkingCommands(app_commands.Group):
             challs = Challenge.objects(ctf=ctf_db)
         else:
             challs = Challenge.objects(ctf=ctf_db, solved=False)
-        challs = sorted(challs, key=lambda x: (x.category, x.name))
+        challs = sorted(challs, key=lambda x: (x.category or '', x.name))
         tbl = {}
         for i, chall in enumerate(challs):
             for work in chall.working:
@@ -221,7 +221,7 @@ class WorkingCommands(app_commands.Group):
             return
 
         filename = '/tmp/{}.png'.format(random.choice(string.ascii_letters) for _ in range(10))
-        export_table(tbl, [chall.category + "-" + chall.name for chall in challs], filename)
+        export_table(tbl, [(chall.category + "-" if chall.category else '') + chall.name for chall in challs], filename)
         await interaction.edit_original_response(attachments=[discord.File(filename, filename='overview.png')])
         os.remove(filename)
 

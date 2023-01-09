@@ -11,7 +11,7 @@ class Working(EmbeddedDocument):
 class Challenge(Document):
     name = StringField(required=True)
     channel_id = LongField(required=True)
-    category = StringField(required=True)
+    category = StringField(default=None)
     ctf = ReferenceField(Ctf, required=True)
     solvers = ListField(LongField(), default=[])
     working = EmbeddedDocumentListField(Working)

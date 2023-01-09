@@ -9,13 +9,19 @@ CATEGORY_MAX_CHANNELS = 50
 
 
 def get_category_pos(category_channel: discord.CategoryChannel, name: str):
-    ctf, category, _ = name.split("-")
+    if name.count("-") == 1:
+        ctf, category = name.split("-")[0], None
+    else:
+        ctf, category, _ = name.split("-")
     same_category_channel = None
     same_ctf_channel = None
     for channel in category_channel.text_channels:
         if channel.name.startswith(f"{ctf}-"):
             same_ctf_channel = channel
-        if channel.name.startswith(f"{ctf}-{category}-"):
+        if category is None:
+            if channel.name.count("-") == 1:
+                same_category_channel = channel
+        elif channel.name.startswith(f"{ctf}-{category}-"):
             same_category_channel = channel
 
     if same_category_channel:
