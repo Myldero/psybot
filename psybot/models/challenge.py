@@ -13,6 +13,7 @@ class Challenge(Document):
     channel_id = LongField(required=True)
     category = StringField(default=None)
     ctf = ReferenceField(Ctf, required=True)
+    work_message = LongField()
     solvers = ListField(LongField(), default=[])
     working = EmbeddedDocumentListField(Working)
     solved = BooleanField(required=True, default=False)

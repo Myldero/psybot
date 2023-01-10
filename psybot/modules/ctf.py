@@ -349,70 +349,6 @@ class CtfCommands(app_commands.Group):
         ctf_db.delete()
 
 
-async def category_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-    current = sanitize_channel_name(current)
-    query = CtfCategory.objects(name=re.compile("^" + re.escape(current)), guild_id=interaction.guild_id).order_by('-count')[:25]
-    return [app_commands.Choice(name=c["name"], value=c["name"]) for c in query]
-
-
-async def category_autocomplete_nullable(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-    out = await category_autocomplete(interaction, current)
-    if len(out) < 25 and "none".startswith(current):
-        out.append(app_commands.Choice(name='None', value=''))
-    return out
-
-
-@app_commands.command(description="Add a challenge")
-@app_commands.autocomplete(category=category_autocomplete_nullable)
-@app_commands.guild_only
-async def add(interaction: discord.Interaction, category: str, name: str):
-    ctf_db = await get_ctf_db(interaction)
-    assert isinstance(interaction.channel, discord.TextChannel)
-
-    if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
-        admin_role = get_admin_role(interaction.guild)
-        await interaction.response.send_message(f"There are too many channels on this discord server. Please "
-                                                f"wait for an admin to delete some channels. {admin_role.mention}",
-                                                allowed_mentions=discord.AllowedMentions.all())
-        return
-    incomplete_category = get_incomplete_category(interaction.guild)
-
-    ctf = sanitize_channel_name(ctf_db.name)
-    name = sanitize_channel_name(name)
-
-    if category:
-        category = sanitize_channel_name(category)
-        fullname = f"{ctf}-{category}-{name}"
-    else:
-        category = None
-        fullname = f"{ctf}-{name}"
-
-    settings = get_settings(interaction.guild)
-    if settings.enforce_categories:
-        if category is not None and not CtfCategory.objects(name=category, guild_id=interaction.guild_id):
-            raise app_commands.AppCommandError("Invalid CTF category")
-
-    if old_chall := Challenge.objects(name=name, category=category, ctf=ctf_db).first():
-        if interaction.guild.get_channel(old_chall.channel_id):
-            raise app_commands.AppCommandError("A challenge with that name already exists")
-        else:
-            old_chall.delete()
-
-    new_channel = await create_channel(fullname, interaction.channel.overwrites, incomplete_category)
-
-    chall_db = Challenge(name=name, category=category, channel_id=new_channel.id, ctf=ctf_db)
-    chall_db.save()
-
-    if category:
-        ctf_category = CtfCategory.objects(name=category, guild_id=interaction.guild_id).first()
-        if ctf_category is None:
-            ctf_category = CtfCategory(name=category, guild_id=interaction.guild_id, count=0)
-        ctf_category.count += 1
-        ctf_category.save()
-
-    await interaction.response.send_message("Added challenge {}".format(new_channel.mention))
-
-
 @app_commands.command(description="Invite a user to the CTF")
 @app_commands.guild_only
 async def invite(interaction: discord.Interaction, user: discord.Member):
@@ -425,5 +361,4 @@ async def invite(interaction: discord.Interaction, user: discord.Member):
 
 def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
     tree.add_command(CtfCommands(name="ctf"), guild=guild)
-    tree.add_command(add, guild=guild)
     tree.add_command(invite, guild=guild)

@@ -29,6 +29,7 @@ psybot.add_commands(tree, guild_obj)
 async def setup_hook():
     client.add_view(notes.ModalNoteView())
     client.add_view(notes.HedgeDocNoteView(""))
+    client.add_view(challenge.WorkView())
 
 
 @client.event

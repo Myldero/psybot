@@ -29,7 +29,7 @@ async def check_channel(guild: discord.Guild, value: str):
 
 SETTING_KEYS = ['team_role', 'admin_role', 'ctfs_category', 'incomplete_category', 'complete_category',
                  'archive_category', 'ctf_archive_category', 'export_channel', 'enforce_categories',
-                 'hedgedoc_url', 'ctftime_team']
+                 'hedgedoc_url', 'ctftime_team', 'send_work_message']
 
 class PsybotCommands(app_commands.Group):
     @app_commands.command(description="Update guild setting")
@@ -51,7 +51,7 @@ class PsybotCommands(app_commands.Group):
             if not await check_channel(interaction.guild, value):
                 raise app_commands.AppCommandError("Value must be a Channel ID")
             setattr(settings, key, int(value))
-        elif key in ('enforce_categories',):
+        elif key in ('enforce_categories', 'send_work_message'):
             setattr(settings, key, value.strip().lower() in ('y', 'yes', 'true', 't', '1'))
         else:
             setattr(settings, key, value)
