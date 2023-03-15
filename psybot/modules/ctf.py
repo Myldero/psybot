@@ -113,14 +113,15 @@ class CtfCommands(app_commands.Group):
             raise app_commands.AppCommandError("There are too many channels on this discord server")
         name = sanitize_channel_name(name)
 
+        await interaction.response.defer()
+
         new_role = await interaction.guild.create_role(name=name + "-team")
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
             new_role: discord.PermissionOverwrite(view_channel=True)
         }
 
-        if not private:
-            overwrites[get_team_role(interaction.guild)] = discord.PermissionOverwrite(view_channel=True)
+        await interaction.user.add_roles(new_role)
 
         ctf_category = get_ctfs_category(interaction.guild)
         new_channel = await create_channel(name, overwrites, ctf_category, challenge=False)
@@ -140,7 +141,12 @@ class CtfCommands(app_commands.Group):
         ctf_db = Ctf(name=name, channel_id=new_channel.id, role_id=new_role.id, info=info, info_id=info_msg.id, private=private)
         ctf_db.save()
 
-        await interaction.response.send_message(f"Created ctf {new_channel.mention}")
+        await interaction.edit_original_response(content=f"Created ctf {new_channel.mention}")
+
+        if not private:
+            for member in get_team_role(interaction.guild).members:
+                await member.add_roles(new_role)
+
 
     @app_commands.command(description="Update CTF information")
     @app_commands.choices(field=[
@@ -355,10 +361,33 @@ async def invite(interaction: discord.Interaction, user: discord.Member):
     ctf_db = await get_ctf_db(interaction)
     assert isinstance(interaction.channel, discord.TextChannel)
 
-    await user.add_roles(interaction.guild.get_role(ctf_db.role_id), reason="Invited to CTF")
+    await user.add_roles(interaction.guild.get_role(ctf_db.role_id), reason=f"Invited by {interaction.user.name}")
     await interaction.response.send_message("Invited user {}".format(user.mention))
+
+
+@app_commands.command(description="Leave a CTF")
+@app_commands.guild_only
+async def leave(interaction: discord.Interaction):
+    ctf_db = await get_ctf_db(interaction)
+    assert isinstance(interaction.channel, discord.TextChannel)
+
+    await interaction.user.remove_roles(interaction.guild.get_role(ctf_db.role_id), reason="Left CTF")
+    await interaction.response.send_message(f"{interaction.user.mention} Left the CTF")
+
+
+@app_commands.command(description="Remove a user from the CTF")
+@app_commands.guild_only
+@app_commands.check(is_team_admin)
+async def remove(interaction: discord.Interaction, user: discord.Member):
+    ctf_db = await get_ctf_db(interaction)
+    assert isinstance(interaction.channel, discord.TextChannel)
+
+    await user.remove_roles(interaction.guild.get_role(ctf_db.role_id), reason=f"Removed by {interaction.user.name}")
+    await interaction.response.send_message(f"Removed user {user.mention}")
 
 
 def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
     tree.add_command(CtfCommands(name="ctf"), guild=guild)
     tree.add_command(invite, guild=guild)
+    tree.add_command(leave, guild=guild)
+    tree.add_command(remove, guild=guild)
