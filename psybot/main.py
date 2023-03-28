@@ -40,19 +40,24 @@ async def on_ready():
         logging.critical("Could not connect to MongoDB")
         exit(1)
     if config.guild_id:
-        await setup_settings(client.get_guild(config.guild_id))
+        guild = client.get_guild(config.guild_id)
+        if guild:
+            await setup_settings(guild)
+            await tree.sync(guild=guild_obj)
     else:
         for guild in client.guilds:
             await setup_settings(guild)
-
-    await tree.sync(guild=guild_obj)
+        await tree.sync(guild=guild_obj)
     logging.info(f"{client.user.name} Online")
 
 
 @client.event
 async def on_guild_join(guild: discord.Guild):
-    logging.info(f"{client.user.name} has joined guild \"{guild.name}\"")
-    await setup_settings(guild)
+    if config.guild_id is None or config.guild_id == guild.id:
+        logging.info(f"{client.user.name} has joined guild \"{guild.name}\"")
+        await setup_settings(guild)
+        if config.guild_id:
+            await tree.sync(guild=guild_obj)
 
 
 @tree.error

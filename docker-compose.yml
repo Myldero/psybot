@@ -14,7 +14,7 @@ services:
       - mongo
   mongo:
     image: mongo
-    restart: always
+    restart: unless-stopped
     ports:
       - "127.0.0.1:27017:27017"
     volumes:
@@ -22,6 +22,4 @@ services:
       - mdb_config:/data/configdb
 volumes:
   mdb:
-    external: true
   mdb_config:
-    external: true

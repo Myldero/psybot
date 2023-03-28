@@ -17,6 +17,10 @@ A discord bot that provides tools for collaboration in CTFs. Inspired by [fiskeb
 * `/ctftime team` to see your team's top 10 CTFs. <br />
   Set your team name with `/psybot set key:ctftime_team value:kalmarunionen`
 ## Installation
+First, you need to create a bot on https://discord.com/developers/applications. \
+Then invite it with the following link, replacing `CLIENT_ID` with your actual id:
+https://discord.com/api/oauth2/authorize?client_id=CLIENT_ID&permissions=8&scope=bot%20applications.commands
+
 ### With `docker-compose`
 Create a `.env` file like this:
 ```
