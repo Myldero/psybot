@@ -2,7 +2,7 @@ import datetime
 import json
 import os.path
 import re
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import discord
 from discord import app_commands
@@ -31,13 +31,13 @@ async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] 
     return ctf_db
 
 
-def user_to_dict(user):
+def user_to_dict(user: Union[discord.Member, discord.User]):
     """
     Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L156
     """
     return {
         "id": user.id,
-        "nick": user.nick,
+        "nick": user.nick if isinstance(user, discord.Member) else None,
         "user": user.name,
         "avatar": user.avatar.key if user.avatar else None,
         "bot": user.bot,
@@ -293,7 +293,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def export(self, interaction: discord.Interaction):
-        ctf_db = await get_ctf_db(interaction, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         await interaction.response.defer()
