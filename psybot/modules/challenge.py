@@ -1,8 +1,7 @@
 import os
-import random
 import re
-import string
-from typing import Optional, Tuple, List
+import tempfile
+from typing import Optional, Tuple, List, Dict
 
 from discord import app_commands, ui
 import discord
@@ -238,13 +237,14 @@ WORK_VALUES = [WorkValue(0, 0xffffff, "None"),
                WorkValue(2, 0xffab00, "Has Worked")]
 CELL_HEIGHT = 35 / 77
 CELL_WIDTH = 100 / 77
+MAX_TABLE_USERS = 20
 
-
-def export_table(solves: dict, challs: list, filename: str):
+def export_table(solves: Dict[discord.Member, List[int]], challs: List[str], filename: str):
+    has_names = len(solves) <= MAX_TABLE_USERS
     height = len(challs)
     width = len(solves)
 
-    fig, ax = plt.subplots(figsize=(width * CELL_WIDTH, height * CELL_HEIGHT))
+    fig, ax = plt.subplots(figsize=(width * (CELL_WIDTH if has_names else CELL_HEIGHT), height * CELL_HEIGHT))
     ax.axis('off')
     tbl = Table(ax, loc="center")
 
@@ -255,10 +255,12 @@ def export_table(solves: dict, challs: list, filename: str):
     for row, name in enumerate(challs):
         add_cell(row + 1, 0, text=name, loc='left')
 
-    for col, name in enumerate(solves.keys()):
-        add_cell(0, col + 1, text=name, edges='B', color='black')
-        tbl[0, col + 1].auto_set_font_size(fig.canvas.get_renderer())
-        for row, val in enumerate(solves[name]):
+    for col, user in enumerate(solves.keys()):
+        nm = user.nick if hasattr(user, 'nick') and user.nick else user.name
+        add_cell(0, col + 1, text=nm if has_names else None, edges='B', color='black')
+        if has_names:
+            tbl[0, col + 1].auto_set_font_size(fig.canvas.get_renderer())
+        for row, val in enumerate(solves[user]):
             color = WORK_VALUES[val].hex_color() if 0 <= val < len(WORK_VALUES) else 'w'
             add_cell(row + 1, col + 1, color=color)
     tbl.auto_set_column_width(0)
@@ -323,19 +325,18 @@ class WorkingCommands(app_commands.Group):
         for i, chall in enumerate(challs):
             for work in chall.working:
                 user = interaction.guild.get_member(work.user)
-                nm = f"{user.nick if user.nick else user.name}"
-                if nm not in tbl:
-                    tbl[nm] = [0] * len(challs)
-                tbl[nm][i] = work.value
+                if user not in tbl:
+                    tbl[user] = [0] * len(challs)
+                tbl[user][i] = work.value
 
         if not tbl:
             await interaction.edit_original_response(content="No work has been done on any challenges yet")
             return
 
-        filename = '/tmp/{}.png'.format(random.choice(string.ascii_letters) for _ in range(10))
-        export_table(tbl, [(chall.category + "-" if chall.category else '') + chall.name for chall in challs], filename)
-        await interaction.edit_original_response(attachments=[discord.File(filename, filename='overview.png')])
-        os.remove(filename)
+        with tempfile.TemporaryDirectory() as tmp:
+            filename = os.path.join(tmp, 'overview.png')
+            export_table(tbl, [(chall.category + "-" if chall.category else '') + chall.name for chall in challs], filename)
+            await interaction.edit_original_response(attachments=[discord.File(filename)])
 
 
 def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
