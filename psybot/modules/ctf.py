@@ -115,13 +115,17 @@ class CtfCommands(app_commands.Group):
 
         await interaction.response.defer()
 
+        settings = get_settings(interaction.guild)
+
         new_role = await interaction.guild.create_role(name=name + "-team")
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
             new_role: discord.PermissionOverwrite(view_channel=True)
         }
-
-        await interaction.user.add_roles(new_role)
+        if not private and settings.use_team_role_as_acl:
+            overwrites[get_team_role(interaction.guild)] = discord.PermissionOverwrite(view_channel=True)
+        if private:
+            await interaction.user.add_roles(new_role)
 
         ctf_category = get_ctfs_category(interaction.guild)
         new_channel = await create_channel(name, overwrites, ctf_category, challenge=False)
@@ -143,7 +147,7 @@ class CtfCommands(app_commands.Group):
 
         await interaction.edit_original_response(content=f"Created ctf {new_channel.mention}")
 
-        if not private:
+        if not private and not settings.use_team_role_as_acl:
             for member in get_team_role(interaction.guild).members:
                 await member.add_roles(new_role)
 
@@ -371,8 +375,12 @@ async def leave(interaction: discord.Interaction):
     ctf_db = await get_ctf_db(interaction)
     assert isinstance(interaction.channel, discord.TextChannel)
 
-    await interaction.user.remove_roles(interaction.guild.get_role(ctf_db.role_id), reason="Left CTF")
-    await interaction.response.send_message(f"{interaction.user.mention} Left the CTF")
+    ctf_role = interaction.guild.get_role(ctf_db.role_id)
+    if ctf_role in interaction.user.roles:
+        await interaction.user.remove_roles(ctf_role, reason="Left CTF")
+        await interaction.response.send_message(f"{interaction.user.mention} Left the CTF")
+    else:
+        await interaction.response.send_message("Cannot leave CTF", ephemeral=True)
 
 
 @app_commands.command(description="Remove a user from the CTF")
@@ -382,8 +390,12 @@ async def remove(interaction: discord.Interaction, user: discord.Member):
     ctf_db = await get_ctf_db(interaction)
     assert isinstance(interaction.channel, discord.TextChannel)
 
-    await user.remove_roles(interaction.guild.get_role(ctf_db.role_id), reason=f"Removed by {interaction.user.name}")
-    await interaction.response.send_message(f"Removed user {user.mention}")
+    ctf_role = interaction.guild.get_role(ctf_db.role_id)
+    if ctf_role in user.roles:
+        await user.remove_roles(ctf_role, reason=f"Removed by {interaction.user.name}")
+        await interaction.response.send_message(f"Removed user {user.mention}")
+    else:
+        await interaction.response.send_message("Cannot remove user from CTF", ephemeral=True)
 
 
 def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):

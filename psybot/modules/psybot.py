@@ -26,35 +26,56 @@ async def check_channel(guild: discord.Guild, value: str):
     channel = guild.get_channel(int(value))
     return isinstance(channel, discord.TextChannel)
 
-
-SETTING_KEYS = ['team_role', 'admin_role', 'ctfs_category', 'incomplete_category', 'complete_category',
-                 'archive_category', 'ctf_archive_category', 'export_channel', 'enforce_categories',
-                 'hedgedoc_url', 'ctftime_team', 'send_work_message']
+SETTINGS_TYPES = {
+    'team_role': discord.Role,
+    'admin_role': discord.Role,
+    'ctfs_category': discord.CategoryChannel,
+    'incomplete_category': discord.CategoryChannel,
+    'complete_category': discord.CategoryChannel,
+    'archive_category': discord.CategoryChannel,
+    'ctf_archive_category': discord.CategoryChannel,
+    'export_channel': discord.TextChannel,
+    'enforce_categories': bool,
+    'send_work_message': bool,
+    'use_team_role_as_acl': bool,
+    'hedgedoc_url': str,
+    'ctftime_team': str,
+}
 
 class PsybotCommands(app_commands.Group):
     @app_commands.command(description="Update guild setting")
     @app_commands.guild_only
-    @app_commands.choices(key=[app_commands.Choice(name=name, value=name) for name in SETTING_KEYS])
+    @app_commands.choices(key=[app_commands.Choice(name=name, value=name) for name in SETTINGS_TYPES.keys()])
     @app_commands.check(is_team_admin)
     async def set(self, interaction: discord.Interaction, key: str, value: str):
         settings = get_settings(interaction.guild)
+        if key not in SETTINGS_TYPES:
+            raise app_commands.AppCommandError("Invalid key")
+        typ = SETTINGS_TYPES[key]
 
-        if key.endswith("_role"):
+        if typ == discord.Role:
             if not await check_role(interaction.guild, value):
                 raise app_commands.AppCommandError("Value must be a Role ID")
             setattr(settings, key, int(value))
-        elif key.endswith("_category"):
+        elif typ == discord.CategoryChannel:
             if not await check_category(interaction.guild, value):
                 raise app_commands.AppCommandError("Value must be a Category ID")
             setattr(settings, key, int(value))
-        elif key.endswith("_channel"):
+        elif typ == discord.TextChannel:
             if not await check_channel(interaction.guild, value):
                 raise app_commands.AppCommandError("Value must be a Channel ID")
             setattr(settings, key, int(value))
-        elif key in ('enforce_categories', 'send_work_message'):
-            setattr(settings, key, value.strip().lower() in ('y', 'yes', 'true', 't', '1'))
-        else:
+        elif typ == bool:
+            if value.strip().lower() in ('y', 'yes', 'true', 't', '1'):
+                setattr(settings, key, True)
+            elif value.strip().lower() in ('n', 'no', 'false', 'f', '0'):
+                setattr(settings, key, False)
+            else:
+                raise app_commands.AppCommandError("Invalid boolean value. Please choose (y/n)")
+        elif typ == str:
             setattr(settings, key, value)
+        else:
+            raise app_commands.AppCommandError("Invalid key")
 
         try:
             settings.save()
