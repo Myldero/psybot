@@ -132,8 +132,8 @@ async def setup_settings(guild: discord.Guild):
         settings = GuildSettings(guild_id=guild.id)
 
     discord_values = {
-        "team_role": "Team Member",
         "admin_role": "Team Admin",
+        "team_role": "Team Member",
         "ctfs_category": "CTFS",
         "incomplete_category": "INCOMPLETE CHALLENGES",
         "complete_category": "COMPLETE CHALLENGES",
@@ -175,7 +175,7 @@ def get_team_role(guild: discord.Guild) -> discord.Role:
     settings = get_settings(guild)
     team_role = guild.get_role(settings.team_role)
     if team_role is None:
-        raise app_commands.AppCommandError("Team role missing. Fix this with /psybot set team_role")
+        raise app_commands.AppCommandError("Team role missing. Fix this with /psybot set team_role <role_id>")
     return team_role
 
 
@@ -183,7 +183,7 @@ def get_export_channel(guild: discord.Guild) -> discord.TextChannel:
     settings = get_settings(guild)
     export_channel = guild.get_channel(settings.export_channel)
     if export_channel is None:
-        raise app_commands.AppCommandError("Export channel missing. Fix this with /psybot set {}".format(export_channel))
+        raise app_commands.AppCommandError("Export channel missing. Fix this with /psybot set export_channel <channel_id>")
     return export_channel
 
 
@@ -191,7 +191,7 @@ def _get_category(guild: discord.Guild, category_name: str) -> discord.CategoryC
     settings = get_settings(guild)
     category = guild.get_channel(getattr(settings, category_name))
     if category is None:
-        raise app_commands.AppCommandError("'{0}' category missing. Fix this with /psybot set {0}".format(category_name))
+        raise app_commands.AppCommandError("'{0}' category missing. Fix this with /psybot set {0} <category_id>".format(category_name))
     return category
 
 get_ctfs_category = lambda g: _get_category(g, 'ctfs_category')

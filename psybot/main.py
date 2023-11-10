@@ -71,7 +71,10 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             await interaction.response.send_message("An assertion failed when running this command", ephemeral=True)
     except app_commands.AppCommandError:
         if error.args:
-            await interaction.response.send_message(error.args[0], ephemeral=True)
+            if interaction.response.is_done():
+                await interaction.edit_original_response(content=error.args[0])
+            else:
+                await interaction.response.send_message(error.args[0], ephemeral=True)
 
 
 async def main():
