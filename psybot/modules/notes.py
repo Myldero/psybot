@@ -7,6 +7,8 @@ import discord
 from diff_match_patch import diff_match_patch
 from discord import app_commands, ui
 
+from psybot.models.challenge import Challenge
+from psybot.models.ctf import Ctf
 from psybot.utils import get_settings
 
 MODAL_NOTE_COLOR = 0x202222
@@ -100,6 +102,12 @@ class HedgeDocNoteView(ui.View):
     app_commands.Choice(name="doc", value="doc")
 ])
 async def note(interaction: discord.Interaction, type: str = "doc"):
+    ctf_db: Ctf = Ctf.objects(channel_id=interaction.channel_id).first()
+    if ctf_db is None:
+        chall_db: Challenge = Challenge.objects(channel_id=interaction.channel_id).first()
+        if chall_db is None:
+            raise app_commands.AppCommandError("Not a CTF channel!")
+
     if type == "modal":
         await interaction.response.send_message(embed=discord.Embed(title="note", description="note goes here", color=MODAL_NOTE_COLOR, timestamp=datetime.datetime.now()),
                                             view=ModalNoteView())
