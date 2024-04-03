@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from mongoengine import ValidationError
 
-from psybot.utils import is_team_admin, get_settings
+from psybot.utils import is_team_admin, get_settings, MAX_CHANNELS
 
 
 async def check_role(guild: discord.Guild, value: str):
@@ -43,7 +43,7 @@ SETTINGS_TYPES = {
 }
 
 class PsybotCommands(app_commands.Group):
-    @app_commands.command(description="Update guild setting")
+    @app_commands.command(description="Update guild settings")
     @app_commands.guild_only
     @app_commands.choices(key=[app_commands.Choice(name=name, value=name) for name in SETTINGS_TYPES.keys()])
     @app_commands.check(is_team_admin)
@@ -83,6 +83,29 @@ class PsybotCommands(app_commands.Group):
             raise app_commands.AppCommandError("Invalid value")
 
         await interaction.response.send_message("Setting updated", ephemeral=True)
+
+
+    @app_commands.command(description="Show guild settings and info")
+    @app_commands.guild_only
+    @app_commands.check(is_team_admin)
+    async def info(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild)
+        channel_count = len(interaction.guild.channels)
+
+        response = f"Channels: {channel_count}/{MAX_CHANNELS}\n\n**Settings:**"
+
+        for key, typ in SETTINGS_TYPES.items():
+            value = getattr(settings, key)
+            if typ == discord.Role:
+                value = interaction.guild.get_role(value).mention + f" ({value})"
+            elif typ == discord.TextChannel:
+                value = interaction.guild.get_channel(value).mention + f" ({value})"
+            elif key == 'hedgedoc_url':
+                value = f'<{value}>'
+
+            response += f"\n`{key}`: {value}"
+
+        await interaction.response.send_message(response, ephemeral=True)
 
 
 def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):

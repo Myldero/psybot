@@ -153,6 +153,11 @@ async def setup_settings(guild: discord.Guild):
         setattr(settings, key, new_id)
     settings.save()
 
+    # Add guild admins to admin and team roles
+    for member in guild.members:
+        if member.guild_permissions.administrator and member != guild.me:
+            await member.add_roles(guild.get_role(settings.admin_role), guild.get_role(settings.team_role))
+
 def get_settings(guild: discord.Guild) -> GuildSettings:
     if guild is None:
         raise app_commands.AppCommandError("You must run this command in a guild")
