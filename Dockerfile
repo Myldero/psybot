@@ -1,6 +1,4 @@
-FROM python:3.10.4-slim
-
-RUN apt-get update
+FROM python:3.12-slim
 
 ENV NAME psybot
 ENV APP_HOME /home/psybot
