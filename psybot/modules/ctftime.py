@@ -9,6 +9,7 @@ import datetime
 from tabulate import tabulate
 
 from psybot.utils import get_settings
+from psybot.config import config
 
 
 class Ctftime(app_commands.Group):
@@ -16,7 +17,7 @@ class Ctftime(app_commands.Group):
     @staticmethod
     async def get_ctf_info(event_id):
         async with aiohttp.ClientSession() as session:
-            async with session.get(f'https://ctftime.org/api/v1/events/{event_id}/') as response:
+            async with session.get(f'{config.ctftime_url}/api/v1/events/{event_id}/') as response:
                 if response.status != 200:
                     return None
                 data = await response.json()
@@ -71,8 +72,8 @@ class Ctftime(app_commands.Group):
             team = settings.ctftime_team
 
         if team.isnumeric():
-            return f'https://ctftime.org/team/{int(team)}'
-        return f'https://ctftime.org/team/list/?q={quote_plus(team)}'
+            return f'{config.ctftime_url}/team/{int(team)}'
+        return f'{config.ctftime_url}/team/list/?q={quote_plus(team)}'
 
     @staticmethod
     async def get_team_top10(team_url, year):
@@ -98,7 +99,7 @@ class Ctftime(app_commands.Group):
                     for name, weight in organized_tbl:
                         event_id = name['href'].split("/")[-1]
 
-                        async with session.get(f'https://ctftime.org/api/v1/events/{event_id}/') as response:
+                        async with session.get(f'{config.ctftime_url}/api/v1/events/{event_id}/') as response:
                             if response.status != 200:
                                 break
                             resp = await response.json()
@@ -120,7 +121,7 @@ class Ctftime(app_commands.Group):
             raise app_commands.AppCommandError("Invalid country. Use the alpha-2 country code")
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(f'https://ctftime.org/stats/{year}/{country.upper()}') as response:
+            async with session.get(f'{config.ctftime_url}/stats/{year}/{country.upper()}') as response:
                 if response.status != 200:
                     raise app_commands.AppCommandError("Unknown country")
 
