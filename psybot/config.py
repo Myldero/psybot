@@ -30,7 +30,7 @@ class Config:
         self.mongodb_uri = parse_variable("MONGODB_URI", str, default="mongodb://localhost:27017")
         self.mongodb_db = parse_variable("MONGODB_DB", str, default="psybot")
         self.backups_dir = parse_variable("BACKUPS_DIR", str, default=BACKUPS_DIR_DEFAULT)
-        self.ctftime_url = parse_variable("CTFTIME_URL", str, default="https://ctftime.com")
+        self.ctftime_url = parse_variable("CTFTIME_URL", str, default="https://ctftime.org")
 
 
 config = Config()
