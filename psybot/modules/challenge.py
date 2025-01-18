@@ -156,6 +156,8 @@ async def done(interaction: discord.Interaction, contributors: Optional[str]):
     chall_db, ctf_db = await check_challenge(interaction)
     assert isinstance(interaction.channel, discord.TextChannel)
 
+    await interaction.response.defer()
+
     users = chall_db.solvers
     if interaction.user.id not in users:
         users.append(interaction.user.id)
@@ -172,7 +174,7 @@ async def done(interaction: discord.Interaction, contributors: Optional[str]):
 
     msg = ":tada: {} was solved by ".format(interaction.channel.mention) + " ".join(f"<@!{user}>" for user in users) + " !"
     await interaction.guild.get_channel(ctf_db.channel_id).send(msg)
-    await interaction.response.send_message("Challenge moved to done!")
+    await interaction.edit_original_response(content="Challenge moved to done!")
 
 
 @app_commands.command(description="Marks a challenge as undone")
@@ -184,12 +186,14 @@ async def undone(interaction: discord.Interaction):
     if not chall_db.solved:
         raise app_commands.AppCommandError("This challenge is not done yet!")
 
+    await interaction.response.defer()
+
     chall_db.solvers = []
     chall_db.solved = False
     chall_db.save()
 
     await move_channel(interaction.channel, get_incomplete_category(interaction.guild))
-    await interaction.response.send_message("Reopened challenge as not done")
+    await interaction.edit_original_response(content="Reopened challenge as not done")
 
 
 class CategoryCommands(app_commands.Group):

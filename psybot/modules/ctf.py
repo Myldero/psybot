@@ -164,7 +164,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def update(self, interaction: discord.Interaction, field: str, value: str):
-        ctf_db = await get_ctf_db(interaction, archived=None)
+        ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         info = ctf_db.info or {}
@@ -268,7 +268,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def rename(self, interaction: discord.Interaction, name: str):
-        ctf_db = await get_ctf_db(interaction, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         await interaction.response.defer()
