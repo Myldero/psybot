@@ -1,12 +1,10 @@
-import datetime
 import json
 import os.path
 import re
-from typing import List, Optional, Union
-
 import discord
-from discord import app_commands
-from discord import ui
+
+from discord import app_commands, ui
+from dateutil import parser as dateutil_parser
 
 from psybot.models.ctf_category import CtfCategory
 from psybot.utils import *
@@ -17,7 +15,7 @@ from psybot.models.challenge import Challenge
 from psybot.models.ctf import Ctf
 
 
-async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] = False, allow_chall: bool = True) -> Ctf:
+async def get_ctf_db(interaction: discord.Interaction, archived: bool | None = False, allow_chall: bool = True) -> Ctf:
     ctf_db: Ctf = Ctf.objects(channel_id=interaction.channel_id).first()
     if ctf_db is None:
         chall_db: Challenge = Challenge.objects(channel_id=interaction.channel_id).first()
@@ -31,7 +29,7 @@ async def get_ctf_db(interaction: discord.Interaction, archived: Optional[bool] 
     return ctf_db
 
 
-def user_to_dict(user: Union[discord.Member, discord.User]):
+def user_to_dict(user: discord.Member | discord.User):
     """
     Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L156
     """
@@ -44,7 +42,7 @@ def user_to_dict(user: Union[discord.Member, discord.User]):
     }
 
 
-async def export_channels(channels: List[discord.TextChannel]):
+async def export_channels(channels: list[discord.TextChannel]):
     """
     Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L778
     """
@@ -108,10 +106,12 @@ class CtfCommands(app_commands.Group):
     @app_commands.command(description="Create a new CTF event")
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
-    async def create(self, interaction: discord.Interaction, name: str, ctftime: Optional[str], private: bool = False):
+    async def create(self, interaction: discord.Interaction, name: str, ctftime: str | None, private: bool = False):
         if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
             raise app_commands.AppCommandError("There are too many channels on this discord server")
         name = sanitize_channel_name(name)
+        if not name:
+            raise app_commands.AppCommandError("Invalid CTF name")
 
         await interaction.response.defer()
 
@@ -175,12 +175,9 @@ class CtfCommands(app_commands.Group):
                 t = int(value)
             else:
                 try:
-                    t = int(datetime.datetime.strptime(value, "%Y-%m-%d %H:%M %z").timestamp())
-                except ValueError:
-                    try:
-                        t = int(datetime.datetime.strptime(value, "%Y-%m-%d %H:%M").timestamp())
-                    except ValueError:
-                        raise app_commands.AppCommandError('Invalid time. Either Unix Timestamp or "%Y-%m-%d %H:%M %z" (Timezone is optional but can for example be "+0200")')
+                    t = int(dateutil_parser.parse(value).timestamp())
+                except dateutil_parser.ParserError:
+                    raise app_commands.AppCommandError("Invalid time, please use any standard time format")
             info[field] = t
         elif field == "creds":
             c = value.split(":", 1)
@@ -271,9 +268,11 @@ class CtfCommands(app_commands.Group):
         ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
-        await interaction.response.defer()
-
         name = sanitize_channel_name(name)
+        if not name:
+            raise app_commands.AppCommandError("Invalid CTF name")
+
+        await interaction.response.defer()
 
         if ctf_db.info.get('title') == ctf_db.name:
             ctf_db.info['title'] = name
@@ -323,9 +322,8 @@ class CtfCommands(app_commands.Group):
             with open(filepath, 'w') as f:
                 f.write(json.dumps(ctf_export, separators=(",", ":")))
         except FileNotFoundError:
-            # This is due to os.makedirs not succeeding
-            await interaction.edit_original_response(content=f"Invalid file permissions when exporting CTF")
-            return
+            # Export dir was not created
+            raise app_commands.AppCommandError("Invalid file permissions when exporting CTF")
 
         export_channel = get_export_channel(interaction.guild)
         await export_channel.send(files=[discord.File(filepath, filename=f"{ctf_db.name}.json")])
@@ -334,7 +332,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.command(description="Delete a CTF and its channels")
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
-    async def delete(self, interaction: discord.Interaction, security: Optional[str]):
+    async def delete(self, interaction: discord.Interaction, security: str | None):
         ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
@@ -362,11 +360,32 @@ class CtfCommands(app_commands.Group):
 @app_commands.command(description="Invite a user to the CTF")
 @app_commands.guild_only
 async def invite(interaction: discord.Interaction, user: discord.Member):
+    settings = get_settings(interaction.guild)
+    if settings.invite_admin_only and not get_admin_role(interaction.guild) in interaction.user.roles:
+        raise app_commands.AppCommandError("Only team admins are allowed to run this command")
     ctf_db = await get_ctf_db(interaction)
     assert isinstance(interaction.channel, discord.TextChannel)
 
     await user.add_roles(interaction.guild.get_role(ctf_db.role_id), reason=f"Invited by {interaction.user.name}")
     await interaction.response.send_message("Invited user {}".format(user.mention))
+
+
+@app_commands.command(description="Invite all members with a specific role to the CTF")
+@app_commands.guild_only
+async def inviterole(interaction: discord.Interaction, role: discord.Role):
+    settings = get_settings(interaction.guild)
+    if settings.invite_admin_only and not get_admin_role(interaction.guild) in interaction.user.roles:
+        raise app_commands.AppCommandError("Only team admins are allowed to run this command")
+    ctf_db = await get_ctf_db(interaction)
+    assert isinstance(interaction.channel, discord.TextChannel)
+
+    if not role.members:
+        raise app_commands.AppCommandError("The specified role doesn't have any members")
+
+    for user in role.members:
+        await user.add_roles(interaction.guild.get_role(ctf_db.role_id), reason=f"Invited by {interaction.user.name}")
+    mention_message = ", ".join(user.mention for user in role.members)
+    await interaction.response.send_message("Invited user{} {}".format('s' if len(role.members) > 1 else '', mention_message))
 
 
 @app_commands.command(description="Leave a CTF")
@@ -398,8 +417,9 @@ async def remove(interaction: discord.Interaction, user: discord.Member):
         await interaction.response.send_message("Cannot remove user from CTF", ephemeral=True)
 
 
-def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
+def add_commands(tree: app_commands.CommandTree, guild: discord.Object | None):
     tree.add_command(CtfCommands(name="ctf"), guild=guild)
     tree.add_command(invite, guild=guild)
+    tree.add_command(inviterole, guild=guild)
     tree.add_command(leave, guild=guild)
     tree.add_command(remove, guild=guild)

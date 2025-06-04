@@ -2,7 +2,7 @@ import logging
 import os
 
 
-def parse_variable(variable, vartype, default=None, required=False):
+def parse_variable(variable: str, vartype: type, default=None, required=False):
     value = os.getenv(variable, None)
     if not value:
         if required:
@@ -13,9 +13,10 @@ def parse_variable(variable, vartype, default=None, required=False):
     if vartype == str:
         return value
     elif vartype == bool:
-        return True if value.lower() in ["true", "1", "t", "y", "yes"] else False
+        return value.lower() in ["true", "1", "t", "y", "yes"]
     elif vartype == int:
         return int(value) if value.isdigit() else default
+    raise ValueError("Invalid variable type")
 
 
 BACKUPS_DIR_DEFAULT = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../backups'))

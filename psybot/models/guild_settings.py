@@ -14,7 +14,8 @@ class GuildSettings(Document):
     enforce_categories = BooleanField(default=True)
     send_work_message = BooleanField(default=True)
     use_team_role_as_acl = BooleanField(default=False)
-    hedgedoc_url = StringField(required=True, max_length=100, default="https://demo.hedgedoc.org")
+    invite_admin_only = BooleanField(default=False)
+    hedgedoc_url = StringField(max_length=100)
     ctftime_team = StringField(max_length=50)
     meta = {
         'indexes': [

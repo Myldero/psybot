@@ -1,7 +1,8 @@
-discord.py~=2.4
+discord.py~=2.5
 tabulate~=0.9
 mongoengine~=0.29
 aiohttp~=3.11
 beautifulsoup4~=4.12
 diff-match-patch
 matplotlib~=3.10
+python-dateutil~=2.9

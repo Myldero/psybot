@@ -1,11 +1,10 @@
 import datetime
 import logging
-from typing import Optional
-
 import aiohttp
 import discord
-from diff_match_patch import diff_match_patch
+
 from discord import app_commands, ui
+from diff_match_patch import diff_match_patch
 
 from psybot.utils import get_settings
 
@@ -99,26 +98,28 @@ class HedgeDocNoteView(ui.View):
     app_commands.Choice(name="modal", value="modal"),
     app_commands.Choice(name="doc", value="doc")
 ])
-async def note(interaction: discord.Interaction, type: str = "doc"):
+async def note(interaction: discord.Interaction, type: str = "modal"):
     if type == "modal":
         await interaction.response.send_message(embed=discord.Embed(title="note", description="note goes here", color=MODAL_NOTE_COLOR, timestamp=datetime.datetime.now()),
                                             view=ModalNoteView())
     elif type == "doc":
+        if interaction.guild is None:
+            await interaction.response.send_message("HedgeDoc notes are only available in a guild")
+            return
+        settings = get_settings(interaction.guild)
+        if settings.hedgedoc_url is None:
+            await interaction.response.send_message("HedgeDoc has not been set up in this guild")
+            return
+
         await interaction.response.defer()
-        hedgedoc_url = "https://demo.hedgedoc.org"
-        if interaction.guild is not None:
-            settings = get_settings(interaction.guild)
-            if settings.hedgedoc_url:
-                hedgedoc_url = settings.hedgedoc_url
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(hedgedoc_url + "/new") as response:
-                if response.status != 200:
-                    await interaction.edit_original_response(content="Could not create a HedgeDoc note")
-                    return
-                await interaction.edit_original_response(embed=discord.Embed(title="note", description="", color=HEDGEDOC_NOTE_COLOR, timestamp=datetime.datetime.now()),
-                                                    view=HedgeDocNoteView(str(response.url) + "?edit"))
+        async with aiohttp.ClientSession() as session, session.get(settings.hedgedoc_url + "/new") as response:
+            if response.status != 200:
+                await interaction.edit_original_response(content="Could not create a HedgeDoc note")
+                return
+            await interaction.edit_original_response(embed=discord.Embed(title="note", description="", color=HEDGEDOC_NOTE_COLOR, timestamp=datetime.datetime.now()),
+                                                view=HedgeDocNoteView(str(response.url) + "?edit"))
 
 
-def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
+def add_commands(tree: app_commands.CommandTree, guild: discord.Object | None):
     tree.add_command(note, guild=guild)

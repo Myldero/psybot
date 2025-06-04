@@ -1,8 +1,8 @@
 import asyncio
 import logging
-
-import discord
 import pymongo.errors
+import discord
+
 from discord import app_commands
 
 from psybot.modules import ctf, ctftime, challenge, notes, psybot
@@ -47,7 +47,7 @@ async def on_ready():
     else:
         for guild in client.guilds:
             await setup_settings(guild)
-        await tree.sync(guild=guild_obj)
+        await tree.sync()
     logging.info(f"{client.user.name} Online")
 
 
@@ -62,19 +62,25 @@ async def on_guild_join(guild: discord.Guild):
 
 @tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    async def send_response(message):
+        if interaction.response.is_done():
+            await interaction.edit_original_response(content=message)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
     try:
         raise error
     except app_commands.CommandInvokeError as e:
         try:
             raise e.original
         except AssertionError:
-            await interaction.response.send_message("An assertion failed when running this command", ephemeral=True)
+            await send_response("An assertion failed when running this command")
+            raise
+        except Exception:
+            await send_response("An error occurred when running this command")
+            raise
     except app_commands.AppCommandError:
         if error.args:
-            if interaction.response.is_done():
-                await interaction.edit_original_response(content=error.args[0])
-            else:
-                await interaction.response.send_message(error.args[0], ephemeral=True)
+            await send_response(error.args[0])
 
 
 async def main():

@@ -1,6 +1,5 @@
-from typing import Optional
-
 import discord
+
 from discord import app_commands
 from mongoengine import ValidationError
 
@@ -38,6 +37,7 @@ SETTINGS_TYPES = {
     'enforce_categories': bool,
     'send_work_message': bool,
     'use_team_role_as_acl': bool,
+    'invite_admin_only': bool,
     'hedgedoc_url': str,
     'ctftime_team': str,
 }
@@ -108,5 +108,5 @@ class PsybotCommands(app_commands.Group):
         await interaction.response.send_message(response, ephemeral=True)
 
 
-def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
+def add_commands(tree: app_commands.CommandTree, guild: discord.Object | None):
     tree.add_command(PsybotCommands(name="psybot"), guild=guild)

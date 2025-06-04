@@ -1,8 +1,10 @@
 import discord
+
 from discord import app_commands
 
 from psybot.models.backup_category import BackupCategory
 from psybot.models.guild_settings import GuildSettings
+
 
 MAX_CHANNELS = 500
 CATEGORY_MAX_CHANNELS = 50
@@ -11,8 +13,10 @@ CATEGORY_MAX_CHANNELS = 50
 def get_category_pos(category_channel: discord.CategoryChannel, name: str):
     if name.count("-") == 1:
         ctf, category = name.split("-")[0], None
-    else:
+    elif name.count("-") == 2:
         ctf, category, _ = name.split("-")
+    else:
+        raise app_commands.AppCommandError("Not a challenge")
     same_category_channel = None
     same_ctf_channel = None
     for channel in category_channel.text_channels:
@@ -109,6 +113,7 @@ def _discord_get(guild: discord.Guild, value: int, id_type: str):
         return guild.get_role(value)
     elif id_type == "channel" or id_type == "category":
         return guild.get_channel(value)
+    return None
 
 def _discord_find(guild: discord.Guild, name: str, id_type: str):
     if id_type == "role":
@@ -117,6 +122,7 @@ def _discord_find(guild: discord.Guild, name: str, id_type: str):
         return discord.utils.get(guild.channels, name=name)
     elif id_type == "category":
         return discord.utils.get(guild.categories, name=name)
+    return None
 
 def _discord_create(guild: discord.Guild, name: str, id_type: str):
     if id_type == "role":
@@ -125,6 +131,7 @@ def _discord_create(guild: discord.Guild, name: str, id_type: str):
         return guild.create_text_channel(name=name)
     elif id_type == "category":
         return guild.create_category_channel(name=name)
+    return None
 
 async def setup_settings(guild: discord.Guild):
     settings = GuildSettings.objects(guild_id=guild.id).first()
@@ -154,9 +161,13 @@ async def setup_settings(guild: discord.Guild):
     settings.save()
 
     # Add guild admins to admin and team roles
-    for member in guild.members:
-        if member.guild_permissions.administrator and member != guild.me:
-            await member.add_roles(guild.get_role(settings.admin_role), guild.get_role(settings.team_role))
+    try:
+        for member in guild.members:
+            if member.guild_permissions.administrator and member != guild.me:
+                await member.add_roles(guild.get_role(settings.admin_role), guild.get_role(settings.team_role))
+    except discord.errors.Forbidden:
+        # The roles already existed before the bot, so the bot doesn't have access to modify them
+        pass
 
 def get_settings(guild: discord.Guild) -> GuildSettings:
     if guild is None:

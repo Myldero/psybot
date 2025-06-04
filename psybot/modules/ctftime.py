@@ -1,11 +1,11 @@
-from urllib.parse import quote_plus
-
 import discord
 import aiohttp
+
+from urllib.parse import quote_plus
+from dateutil import parser as dateutil_parser
 from discord import app_commands
-from typing import Optional
 from bs4 import BeautifulSoup
-import datetime
+from datetime import datetime
 from tabulate import tabulate
 
 from psybot.utils import get_settings
@@ -15,18 +15,18 @@ from psybot.config import config
 class Ctftime(app_commands.Group):
 
     @staticmethod
-    async def get_ctf_info(event_id):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f'{config.ctftime_url}/api/v1/events/{event_id}/') as response:
-                if response.status != 200:
-                    return None
-                data = await response.json()
-                return {
-                    'title': data['title'],
-                    'url': data['url'],
-                    'start': int(datetime.datetime.strptime(data["start"], "%Y-%m-%dT%H:%M:%S%z").timestamp()),
-                    'end': int(datetime.datetime.strptime(data["finish"], "%Y-%m-%dT%H:%M:%S%z").timestamp()),
-                }
+    async def get_ctf_info(event_id: int) -> dict:
+        event_url = f'{config.ctftime_url}/api/v1/events/{event_id}/'
+        async with aiohttp.ClientSession() as session, session.get(event_url) as response:
+            if response.status != 200:
+                return None
+            data = await response.json()
+            return {
+                'title': data['title'],
+                'url': data['url'],
+                'start': int(dateutil_parser.parse(data["start"]).timestamp()),
+                'end': int(dateutil_parser.parse(data["start"]).timestamp()),
+            }
 
     @staticmethod
     def get_table_from_html(tbl, raw=False):
@@ -51,7 +51,7 @@ class Ctftime(app_commands.Group):
 
     @staticmethod
     def check_year(year):
-        current_year = datetime.datetime.now().year
+        current_year = datetime.now().year
         if year is None:
             return current_year
         if 0 <= year < 100:
@@ -77,42 +77,40 @@ class Ctftime(app_commands.Group):
 
     @staticmethod
     async def get_team_top10(team_url, year):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(team_url) as response:
-                if response.status != 200:
-                    raise app_commands.AppCommandError("Unknown team")
+        async with aiohttp.ClientSession() as session, session.get(team_url) as response:
+            if response.status != 200:
+                raise app_commands.AppCommandError("Unknown team")
 
-                html = await response.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                team_name = soup.find(class_='page-header').text.strip()
+            html = await response.text()
+            soup = BeautifulSoup(html, 'html.parser')
+            team_name = soup.find(class_='page-header').text.strip()
 
-                year_rating = soup.find(id=f'rating_{year}')
-                if year_rating is None:
-                    raise app_commands.AppCommandError("Invalid year")
-                _, tbl = Ctftime.get_table_from_html(year_rating.find('table'))
+            year_rating = soup.find(id=f'rating_{year}')
+            if year_rating is None:
+                raise app_commands.AppCommandError("Invalid year")
+            _, tbl = Ctftime.get_table_from_html(year_rating.find('table'))
 
-                h3_tag = soup.find('h3', text='Organized CTF events')
-                organized_tag = h3_tag.find_next_sibling('table') if h3_tag else None
+            h3_tag = soup.find('h3', text='Organized CTF events')
+            organized_tag = h3_tag.find_next_sibling('table') if h3_tag else None
 
-                if organized_tag:
-                    _, organized_tbl = Ctftime.get_table_from_html(organized_tag, raw=True)
-                    for name, weight in organized_tbl:
-                        event_id = name['href'].split("/")[-1]
+            if organized_tag:
+                _, organized_tbl = Ctftime.get_table_from_html(organized_tag, raw=True)
+                for name, weight in organized_tbl:
+                    event_id = name['href'].split("/")[-1]
 
-                        async with session.get(f'{config.ctftime_url}/api/v1/events/{event_id}/') as response:
-                            if response.status != 200:
-                                break
-                            resp = await response.json()
-                            if int(resp['finish'][:4]) != year:
-                                break
-                        tbl.append(['-', name.text, '-', str(float(weight.text)*2)])
-                tbl = sorted(tbl, key=lambda row: -float(row[3].replace('*','')))[:10]
-                s = sum(float(row[3].replace('*','')) for row in tbl)
-                return team_name, tbl, s
-
+                    async with session.get(f'{config.ctftime_url}/api/v1/events/{event_id}/') as response:
+                        if response.status != 200:
+                            break
+                        resp = await response.json()
+                        if int(resp['finish'][:4]) != year:
+                            break
+                    tbl.append(['-', name.text, '-', str(float(weight.text)*2)])
+            tbl = sorted(tbl, key=lambda row: -float(row[3].replace('*','')))[:10]
+            s = sum(float(row[3].replace('*','')) for row in tbl)
+            return team_name, tbl, s
 
     @app_commands.command(description="Display top teams for a specified year and/or country")
-    async def top(self, interaction: discord.Interaction, country: Optional[str], year: Optional[int]):
+    async def top(self, interaction: discord.Interaction, country: str | None, year: int | None):
         year = self.check_year(year)
         if year is None:
             raise app_commands.AppCommandError("Invalid year")
@@ -120,25 +118,28 @@ class Ctftime(app_commands.Group):
         if country and (len(country) != 2 or not country.isalpha()):
             raise app_commands.AppCommandError("Invalid country. Use the alpha-2 country code")
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f'{config.ctftime_url}/stats/{year}/{country.upper()}') as response:
-                if response.status != 200:
-                    raise app_commands.AppCommandError("Unknown country")
+        stats_url = f"{config.ctftime_url}/stats/{year}/"
+        if country is not None:
+            stats_url += country.upper()
 
-                html = await response.text()
-                soup = BeautifulSoup(html, 'html.parser')
+        async with aiohttp.ClientSession() as session, session.get(stats_url) as response:
+            if response.status != 200:
+                raise app_commands.AppCommandError("Unknown country")
 
-                if country:
-                    country_name = soup.find(class_='flag').parent.text.strip()
+            html = await response.text()
+            soup = BeautifulSoup(html, 'html.parser')
 
-                headers, tbl = self.get_table_from_html(soup.find('table'))
+            if country:
+                country_name = soup.find(class_='flag').parent.text.strip()
 
-        if country:
-            out = f"**Showing top teams for {country_name}** :flag_{country.lower()}:"
+            headers, tbl = self.get_table_from_html(soup.find('table'))
+
+        if country is None:
+            out = "**Showing top teams globally**"
         else:
-            out = f"**Showing top teams**"
+            out = f"**Showing top teams for {country_name}** :flag_{country.lower()}:"
 
-        if year != datetime.datetime.now().year:
+        if year != datetime.now().year:
             out += f' **({year})**'
 
         out += '\n```\n'
@@ -151,7 +152,7 @@ class Ctftime(app_commands.Group):
         await interaction.response.send_message(out)
 
     @app_commands.command(description="Show top 10 events for a team")
-    async def team(self, interaction: discord.Interaction, team: Optional[str], year: Optional[int]):
+    async def team(self, interaction: discord.Interaction, team: str | None, year: int | None):
         year = self.check_year(year)
         if year is None:
             raise app_commands.AppCommandError("Invalid year")
@@ -178,7 +179,7 @@ class Ctftime(app_commands.Group):
         await interaction.edit_original_response(content=out)
 
     @app_commands.command(description="Calculate new CTFTime score from ctf")
-    async def calc(self, interaction: discord.Interaction, weight: float, best_points: float, team_points: float, team_place: int, team: Optional[str]):
+    async def calc(self, interaction: discord.Interaction, weight: float, best_points: float, team_points: float, team_place: int, team: str | None):
         new_score = (team_points/best_points + 1/team_place) * weight
 
         await interaction.response.send_message(f"Rating points: {new_score:.03f}")
@@ -188,7 +189,7 @@ class Ctftime(app_commands.Group):
             return
 
         try:
-            team_name, tbl, old_rating = await self.get_team_top10(url, datetime.datetime.now().year)
+            team_name, tbl, old_rating = await self.get_team_top10(url, datetime.now().year)
         except Exception as e:
             print(e)
             return
@@ -200,5 +201,5 @@ class Ctftime(app_commands.Group):
         await interaction.edit_original_response(content=f'Rating points: {new_score:.03f}\nNew Rating for {team_name}: {new_rating:.03f} (+{score_diff:.03f})')
 
 
-def add_commands(tree: app_commands.CommandTree, guild: Optional[discord.Object]):
+def add_commands(tree: app_commands.CommandTree, guild: discord.Object | None):
     tree.add_command(Ctftime(), guild=guild)
