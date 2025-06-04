@@ -11,7 +11,7 @@ PsyBot adds a number of slash commands for easy and effective CTF management and
 * `/ctf create <name> [ctftime_link] [private]`: Create a new CTF
   * Creates a new CTF channel and provides access for team members
     * `/invite <user>`: Add a new player to the CTF channels
-    * `/invite <role>`: Add all members with a specific role to the CTF channels
+    * `/inviterole <role>`: Add all members with a specific role to the CTF channels
     * `/remove <user>`: Remove a current player - players can leave manually with `/leave`
   * When a CTFtime link is supplied, most CTF information is automatically retrieved
     * Manually update info such as team credentials and Discord link with `/ctf update <field> <value>`
