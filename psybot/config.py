@@ -1,6 +1,8 @@
 import logging
 import os
 
+from pathlib import Path
+
 
 def parse_variable(variable: str, vartype: type, default=None, required=False):
     value = os.getenv(variable, None)
@@ -19,7 +21,7 @@ def parse_variable(variable: str, vartype: type, default=None, required=False):
     raise ValueError("Invalid variable type")
 
 
-BACKUPS_DIR_DEFAULT = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '../backups'))
+BACKUPS_DIR_DEFAULT = str(Path(__file__).parent.parent / "backups")
 
 class Config:
     def __init__(self):

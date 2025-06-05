@@ -1,4 +1,3 @@
-import os
 import re
 import tempfile
 import discord
@@ -7,6 +6,7 @@ import matplotlib.pyplot as plt
 from discord import app_commands, ui
 from mongoengine import NotUniqueError
 from matplotlib.table import Table, Cell
+from pathlib import Path
 
 from psybot.models.ctf_category import CtfCategory
 from psybot.utils import move_channel, is_team_admin, get_incomplete_category, create_channel, get_complete_category, \
@@ -339,7 +339,7 @@ class WorkingCommands(app_commands.Group):
             return
 
         with tempfile.TemporaryDirectory() as tmp:
-            filename = os.path.join(tmp, 'overview.png')
+            filename = Path(tmp) / 'overview.png'
             export_table(tbl, [(chall.category + "-" if chall.category else '') + chall.name for chall in challs], filename)
             await interaction.edit_original_response(attachments=[discord.File(filename)])
 

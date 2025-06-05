@@ -1,11 +1,14 @@
 import json
-import os.path
 import re
 import time
+import logging
 import discord
+import aiohttp
+import traceback
 
 from discord import app_commands, ui
 from dateutil import parser as dateutil_parser
+from pathlib import Path
 
 from psybot.utils import *
 from psybot.modules.ctftime import Ctftime
@@ -42,48 +45,67 @@ def user_to_dict(user: discord.Member | discord.User):
     }
 
 
-async def export_channels(channels: list[discord.TextChannel]):
+async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -> dict:
     """
     Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L778
     """
-    # TODO: Backup attachments, since discord deletes these when messages are deleted
     ctf_export = {"channels": []}
-    for channel in channels:
-        chan = {
-            "name": channel.name,
-            "topic": channel.topic,
-            "messages": [],
-            "pins": [m.id for m in await channel.pins()],
-        }
-
-        async for message in channel.history(limit=None, oldest_first=True):
-            entry = {
-                "id": message.id,
-                "created_at": message.created_at.isoformat(),
-                "content": message.clean_content,
-                "author": user_to_dict(message.author),
-                "attachments": [{"filename": a.filename, "url": str(a.url)} for a in message.attachments],
-                "channel": {
-                    "name": message.channel.name
-                },
-                "edited_at": (
-                    message.edited_at.isoformat()
-                    if message.edited_at is not None
-                    else message.edited_at
-                ),
-                "embeds": [e.to_dict() for e in message.embeds],
-                "mentions": [user_to_dict(mention) for mention in message.mentions],
-                "channel_mentions": [{"id": c.id, "name": c.name} for c in message.channel_mentions],
-                "mention_everyone": message.mention_everyone,
-                "reactions": [
-                    {
-                        "count": r.count,
-                        "emoji": r.emoji if isinstance(r.emoji, str) else {"name": r.emoji.name, "url": r.emoji.url},
-                    } for r in message.reactions
-                ]
+    async with aiohttp.ClientSession() as session:
+        for channel in channels:
+            chan = {
+                "name": channel.name,
+                "topic": channel.topic,
+                "messages": [],
+                "pins": [m.id for m in await channel.pins()],
             }
-            chan["messages"].append(entry)
-        ctf_export["channels"].append(chan)
+
+            async for message in channel.history(limit=None, oldest_first=True):
+                entry = {
+                    "id": message.id,
+                    "created_at": message.created_at.isoformat(),
+                    "content": message.clean_content,
+                    "author": user_to_dict(message.author),
+                    "attachments": [{"filename": a.filename, "url": str(a.url)} for a in message.attachments],
+                    "channel": {
+                        "name": message.channel.name
+                    },
+                    "edited_at": (
+                        message.edited_at.isoformat()
+                        if message.edited_at is not None
+                        else message.edited_at
+                    ),
+                    "embeds": [e.to_dict() for e in message.embeds],
+                    "mentions": [user_to_dict(mention) for mention in message.mentions],
+                    "channel_mentions": [{"id": c.id, "name": c.name} for c in message.channel_mentions],
+                    "mention_everyone": message.mention_everyone,
+                    "reactions": [
+                        {
+                            "count": r.count,
+                            "emoji": r.emoji if isinstance(r.emoji, str) else {"name": r.emoji.name, "url": r.emoji.url},
+                        } for r in message.reactions
+                    ]
+                }
+
+                for attachment in entry["attachments"]:
+                    file_path = file_dir / "{}_{}".format(channel.id,  attachment["filename"])
+                    try:
+                        async with session.get(attachment["url"]) as resp:
+                            if resp.status == 200:
+                                with open(file_path, 'wb') as f:
+                                    while True:
+                                        chunk = await resp.content.readany()
+                                        if not chunk:
+                                            break
+                                        f.write(chunk)
+                            else:
+                                logging.warning(f"Export: failed with status {resp.status}")
+                                attachment["error"] = f"Failed with status {resp.status}"
+                    except Exception as e:
+                        traceback.print_exc()
+                        attachment["error"] = str(e)
+
+                chan["messages"].append(entry)
+            ctf_export["channels"].append(chan)
     return ctf_export
 
 
@@ -432,13 +454,15 @@ class CtfCommands(app_commands.Group):
             else:
                 chall.delete()
 
-        ctf_export = await export_channels(channels)
-
-        filepath = os.path.join(config.backups_dir, str(interaction.guild_id), f"{interaction.channel_id}_{ctf_db.name}.json")
+        dirs = Path(config.backups_dir) / str(interaction.guild_id) / f"{interaction.channel_id}_{ctf_db.name}"
         try:
-            os.makedirs(os.path.dirname(filepath))
+            dirs.mkdir(parents=True, exist_ok=True)
         except OSError:
-            pass
+            logging.warning(f"Failed to create directory {dirs}")
+
+        ctf_export = await export_channels(channels, dirs)
+
+        filepath = dirs.parent / f"{interaction.channel_id}_{ctf_db.name}.json"
 
         try:
             with open(filepath, 'w') as f:
