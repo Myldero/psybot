@@ -262,10 +262,10 @@ class CtfCommands(app_commands.Group):
         url = None
         if 'ctftime_id' in ctf_db.info:
             url = 'https://ctftime.org/event/{}'.format(ctf_db.info['ctftime_id'])
-        if not url and 'url' in ctf_db.info:
+        if not url and ctf_db.info.get('url', '').startswith("http"):
             url = ctf_db.info['url']
         if url:
-            ctf_title = '[{}]({})'.format(ctf_title.strip().replace('[','\\[').replace(']','\\]'), url)
+            ctf_title = '[{}]({})'.format(ctf_title.strip(), url.strip())
 
         message = "We are playing {}.\nYou are invited to join! Press below to request access.".format(ctf_title)
         await channel.send(embed=discord.Embed(
