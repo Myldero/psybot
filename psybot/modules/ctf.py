@@ -1,12 +1,12 @@
 import json
 import os.path
 import re
+import time
 import discord
 
 from discord import app_commands, ui
 from dateutil import parser as dateutil_parser
 
-from psybot.models.ctf_category import CtfCategory
 from psybot.utils import *
 from psybot.modules.ctftime import Ctftime
 from psybot.config import config
@@ -103,6 +103,9 @@ def create_info_message(info):
 
 
 class RequestButton(ui.DynamicItem[ui.Button], template=r'invite_request:ctf:(?P<id>[0-9]+)'):
+    _cache = {}
+    COOLDOWN = 120
+
     def __init__(self, ctf_id: int) -> None:
         super().__init__(
             discord.ui.Button(
@@ -138,6 +141,17 @@ class RequestButton(ui.DynamicItem[ui.Button], template=r'invite_request:ctf:(?P
             if admin_channel is None:
                 raise app_commands.AppCommandError("The request could not be sent!")
 
+            # Handle cooldown
+            now = time.time()
+            dead_keys = [k for k, v in self._cache.items() if now > v + self.COOLDOWN]
+            for k in dead_keys:
+                del self._cache[k]
+
+            key = (interaction.message.id, interaction.user.id)
+            if key in self._cache:
+                raise app_commands.AppCommandError("Please wait before requesting access again")
+            self._cache[key] = now
+
             await interaction.response.send_message('The request has been sent!', ephemeral=True)
             await admin_channel.send(embed=discord.Embed(
                 title='CTF Access Request',
@@ -169,7 +183,6 @@ class ResponseView(ui.View):
             description=message,
             color=discord.Color.green(),
             ).set_footer(text="Accepted by {}".format(interaction.user.display_name)), view=None)
-        self.stop()
 
     @ui.button(label="Deny", style=discord.ButtonStyle.danger, custom_id='invite_response:deny')
     async def deny_invite(self, interaction: discord.Interaction, _button: ui.Button):
@@ -179,7 +192,6 @@ class ResponseView(ui.View):
             description=interaction.message.embeds[0].description,
             color=discord.Color.red(),
             ).set_footer(text="Denied by {}".format(interaction.user.display_name)), view=None)
-        self.stop()
 
 
 class CtfCommands(app_commands.Group):
@@ -255,7 +267,7 @@ class CtfCommands(app_commands.Group):
         if url:
             ctf_title = '[{}]({})'.format(ctf_title.strip().replace('[','\\[').replace(']','\\]'), url)
 
-        message = "We are playing {}. You are invited to join! Press below to request access.".format(ctf_title)
+        message = "We are playing {}.\nYou are invited to join! Press below to request access.".format(ctf_title)
         await channel.send(embed=discord.Embed(
             title=ctf_db.info.get('title', 'CTF'), description=message,
             color=discord.Color.blurple()), view=view)
@@ -508,14 +520,19 @@ async def leave(interaction: discord.Interaction):
     settings = get_settings(interaction.guild)
     team_member = get_team_role(interaction.guild, settings=settings)
     ctf_role = interaction.guild.get_role(ctf_db.role_id)
+    success = False
+
     if ctf_role in interaction.user.roles:
         await interaction.user.remove_roles(ctf_role, reason="Left CTF")
-        await interaction.response.send_message(f"{interaction.user.mention} left the CTF")
-    elif team_member in interaction.user.roles and interaction.channel.permissions_for(team_member).read_messages:
-        inactive_role = get_inactive_role(interaction.guild, settings=settings)
+        success = True
 
+    if team_member in interaction.user.roles and interaction.channel.permissions_for(team_member).read_messages:
+        inactive_role = get_inactive_role(interaction.guild, settings=settings)
         await interaction.user.remove_roles(team_member, reason="Left team temporarily")
         await interaction.user.add_roles(inactive_role, reason="Left team temporarily")
+        success = True
+
+    if success:
         await interaction.response.send_message(f"{interaction.user.mention} left the CTF")
     else:
         await interaction.response.send_message("Cannot leave the CTF. Ask an admin for help", ephemeral=True)
