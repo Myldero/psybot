@@ -86,23 +86,24 @@ async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -
                     ]
                 }
 
-                for attachment in entry["attachments"]:
-                    file_path = file_dir / "{}_{}".format(channel.id,  attachment["filename"])
-                    try:
-                        async with session.get(attachment["url"]) as resp:
-                            if resp.status == 200:
-                                with open(file_path, 'wb') as f:
-                                    while True:
-                                        chunk = await resp.content.readany()
-                                        if not chunk:
-                                            break
-                                        f.write(chunk)
-                            else:
-                                logging.warning(f"Export: failed with status {resp.status}")
-                                attachment["error"] = f"Failed with status {resp.status}"
-                    except Exception as e:
-                        traceback.print_exc()
-                        attachment["error"] = str(e)
+                if not config.disable_download:
+                    for attachment in entry["attachments"]:
+                        file_path = file_dir / "{}_{}".format(channel.id,  attachment["filename"])
+                        try:
+                            async with session.get(attachment["url"]) as resp:
+                                if resp.status == 200:
+                                    with open(file_path, 'wb') as f:
+                                        while True:
+                                            chunk = await resp.content.readany()
+                                            if not chunk:
+                                                break
+                                            f.write(chunk)
+                                else:
+                                    logging.warning(f"Export: failed with status {resp.status}")
+                                    attachment["error"] = f"Failed with status {resp.status}"
+                        except Exception as e:
+                            traceback.print_exc()
+                            attachment["error"] = str(e)
 
                 chan["messages"].append(entry)
             ctf_export["channels"].append(chan)
