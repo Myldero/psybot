@@ -15,10 +15,10 @@ from psybot.models.challenge import Challenge
 from psybot.models.ctf import Ctf
 
 
-async def get_ctf_db(interaction: discord.Interaction, archived: bool | None = False, allow_chall: bool = True) -> Ctf:
-    ctf_db: Ctf = Ctf.objects(channel_id=interaction.channel_id).first()
+async def get_ctf_db(channel: discord.TextChannel, archived: bool | None = False, allow_chall: bool = True) -> Ctf:
+    ctf_db: Ctf = Ctf.objects(channel_id=channel.id).first()
     if ctf_db is None:
-        chall_db: Challenge = Challenge.objects(channel_id=interaction.channel_id).first()
+        chall_db: Challenge = Challenge.objects(channel_id=channel.id).first()
         if not allow_chall or chall_db is None:
             raise app_commands.AppCommandError("Not a CTF channel!")
         ctf_db: Ctf = chall_db.ctf
@@ -102,6 +102,86 @@ def create_info_message(info):
     return msg
 
 
+class RequestButton(ui.DynamicItem[ui.Button], template=r'invite_request:ctf:(?P<id>[0-9]+)'):
+    def __init__(self, ctf_id: int) -> None:
+        super().__init__(
+            discord.ui.Button(
+                label='Request Access',
+                style=discord.ButtonStyle.success,
+                custom_id=f'invite_request:ctf:{ctf_id}',
+            )
+        )
+        self.ctf_id: int = ctf_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: ui.Button, match: re.Match[str], /):
+        ctf_id = int(match['id'])
+        return cls(ctf_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        try:
+            ctf_channel = interaction.guild.get_channel(self.ctf_id)
+            settings = get_settings(interaction.guild)
+
+            if ctf_channel is None:
+                raise app_commands.AppCommandError("The invite is invalid")
+
+            try:
+                await get_ctf_db(ctf_channel, archived=False, allow_chall=False)
+            except app_commands.AppCommandError:
+                raise app_commands.AppCommandError("The invite is invalid")
+
+            if ctf_channel.permissions_for(interaction.user).read_messages:
+                raise app_commands.AppCommandError("You are already in this CTF")
+
+            admin_channel = interaction.guild.get_channel(settings.admin_channel)
+            if admin_channel is None:
+                raise app_commands.AppCommandError("The request could not be sent!")
+
+            await interaction.response.send_message('The request has been sent!', ephemeral=True)
+            await admin_channel.send(embed=discord.Embed(
+                title='CTF Access Request',
+                description="<@{}> has requested access to <#{}>".format(interaction.user.id, ctf_channel.id),
+                color=discord.Color.blurple()), view=ResponseView())
+        except app_commands.AppCommandError as e:
+            await interaction.response.send_message(e.args[0], ephemeral=True)
+
+
+class ResponseView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id='invite_response:accept')
+    async def accept_invite(self, interaction: discord.Interaction, _button: ui.Button):
+        await is_team_admin(interaction)  # Raises an exception if not an admin
+        message = interaction.message.embeds[0].description
+        m = re.match(r'<@([0-9]+)> has requested access to <#([0-9]+)>', message)
+        if m is None:
+            raise app_commands.AppCommandError("Invalid invite")
+        user = interaction.guild.get_member(int(m[1]))
+        channel = interaction.guild.get_channel(int(m[2]))
+        ctf_db = await get_ctf_db(channel, archived=False, allow_chall=False)
+        role = interaction.guild.get_role(ctf_db.role_id)
+        await user.add_roles(role)
+        await channel.send("Invited user {}".format(user.mention))
+        await interaction.message.edit(embed=discord.Embed(
+            title='CTF Access Request',
+            description=message,
+            color=discord.Color.green(),
+            ).set_footer(text="Accepted by {}".format(interaction.user.display_name)), view=None)
+        self.stop()
+
+    @ui.button(label="Deny", style=discord.ButtonStyle.danger, custom_id='invite_response:deny')
+    async def deny_invite(self, interaction: discord.Interaction, _button: ui.Button):
+        await is_team_admin(interaction)  # Raises an exception if not an admin
+        await interaction.message.edit(embed=discord.Embed(
+            title='CTF Access Request',
+            description=interaction.message.embeds[0].description,
+            color=discord.Color.red(),
+            ).set_footer(text="Denied by {}".format(interaction.user.display_name)), view=None)
+        self.stop()
+
+
 class CtfCommands(app_commands.Group):
     @app_commands.command(description="Create a new CTF event")
     @app_commands.guild_only
@@ -123,7 +203,7 @@ class CtfCommands(app_commands.Group):
             new_role: discord.PermissionOverwrite(view_channel=True)
         }
         if not private and settings.use_team_role_as_acl:
-            overwrites[get_team_role(interaction.guild)] = discord.PermissionOverwrite(view_channel=True)
+            overwrites[get_team_role(interaction.guild, settings=settings)] = discord.PermissionOverwrite(view_channel=True)
         if private:
             await interaction.user.add_roles(new_role)
 
@@ -148,8 +228,38 @@ class CtfCommands(app_commands.Group):
         await interaction.edit_original_response(content=f"Created ctf {new_channel.mention}")
 
         if not private and not settings.use_team_role_as_acl:
-            for member in get_team_role(interaction.guild).members:
+            for member in get_team_role(interaction.guild, settings=settings).members:
                 await member.add_roles(new_role)
+
+    @app_commands.command(description="Generate an invitation for the CTF")
+    @app_commands.guild_only
+    @app_commands.check(is_team_admin)
+    async def invite(self, interaction: discord.Interaction):
+        ctf_db = await get_ctf_db(interaction.channel, archived=False, allow_chall=False)
+        assert isinstance(interaction.channel, discord.TextChannel)
+
+        settings = get_settings(interaction.guild)
+        if not settings.invite_channel:
+            raise app_commands.AppCommandError("No invite channel set")
+
+        view = discord.ui.View(timeout=None)
+        view.add_item(RequestButton(interaction.channel_id))
+        channel = interaction.guild.get_channel(settings.invite_channel)
+
+        ctf_title = ctf_db.info.get('title') or ctf_db.name
+        url = None
+        if 'ctftime_id' in ctf_db.info:
+            url = 'https://ctftime.org/event/{}'.format(ctf_db.info['ctftime_id'])
+        if not url and 'url' in ctf_db.info:
+            url = ctf_db.info['url']
+        if url:
+            ctf_title = '[{}]({})'.format(ctf_title.strip().replace('[','\\[').replace(']','\\]'), url)
+
+        message = "We are playing {}. You are invited to join! Press below to request access.".format(ctf_title)
+        await channel.send(embed=discord.Embed(
+            title=ctf_db.info.get('title', 'CTF'), description=message,
+            color=discord.Color.blurple()), view=view)
+        await interaction.response.send_message("Sent invite", ephemeral=True)
 
 
     @app_commands.command(description="Update CTF information")
@@ -164,7 +274,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def update(self, interaction: discord.Interaction, field: str, value: str):
-        ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction.channel, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         info = ctf_db.info or {}
@@ -222,7 +332,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def archive(self, interaction: discord.Interaction):
-        ctf_db = await get_ctf_db(interaction, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction.channel, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         await interaction.response.defer()
@@ -243,7 +353,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def unarchive(self, interaction: discord.Interaction):
-        ctf_db = await get_ctf_db(interaction, archived=True, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction.channel, archived=True, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         await interaction.response.defer()
@@ -265,7 +375,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def rename(self, interaction: discord.Interaction, name: str):
-        ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction.channel, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         name = sanitize_channel_name(name)
@@ -296,7 +406,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def export(self, interaction: discord.Interaction):
-        ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction.channel, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         await interaction.response.defer()
@@ -333,7 +443,7 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def delete(self, interaction: discord.Interaction, security: str | None):
-        ctf_db = await get_ctf_db(interaction, archived=None, allow_chall=False)
+        ctf_db = await get_ctf_db(interaction.channel, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         if security is None:
@@ -357,26 +467,26 @@ class CtfCommands(app_commands.Group):
         ctf_db.delete()
 
 
-@app_commands.command(description="Invite a user to the CTF")
+@app_commands.command(description="Add a user to the CTF")
 @app_commands.guild_only
 async def invite(interaction: discord.Interaction, user: discord.Member):
     settings = get_settings(interaction.guild)
-    if settings.invite_admin_only and not get_admin_role(interaction.guild) in interaction.user.roles:
+    if settings.invite_admin_only and not get_admin_role(interaction.guild, settings=settings) in interaction.user.roles:
         raise app_commands.AppCommandError("Only team admins are allowed to run this command")
-    ctf_db = await get_ctf_db(interaction)
+    ctf_db = await get_ctf_db(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
 
     await user.add_roles(interaction.guild.get_role(ctf_db.role_id), reason=f"Invited by {interaction.user.name}")
     await interaction.response.send_message("Invited user {}".format(user.mention))
 
 
-@app_commands.command(description="Invite all members with a specific role to the CTF")
+@app_commands.command(description="Add all members with a specific role to the CTF")
 @app_commands.guild_only
 async def inviterole(interaction: discord.Interaction, role: discord.Role):
     settings = get_settings(interaction.guild)
-    if settings.invite_admin_only and not get_admin_role(interaction.guild) in interaction.user.roles:
+    if settings.invite_admin_only and not get_admin_role(interaction.guild, settings=settings) in interaction.user.roles:
         raise app_commands.AppCommandError("Only team admins are allowed to run this command")
-    ctf_db = await get_ctf_db(interaction)
+    ctf_db = await get_ctf_db(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
 
     if not role.members:
@@ -391,22 +501,52 @@ async def inviterole(interaction: discord.Interaction, role: discord.Role):
 @app_commands.command(description="Leave a CTF")
 @app_commands.guild_only
 async def leave(interaction: discord.Interaction):
-    ctf_db = await get_ctf_db(interaction)
+    ctf_db = await get_ctf_db(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
 
+
+    settings = get_settings(interaction.guild)
+    team_member = get_team_role(interaction.guild, settings=settings)
     ctf_role = interaction.guild.get_role(ctf_db.role_id)
     if ctf_role in interaction.user.roles:
         await interaction.user.remove_roles(ctf_role, reason="Left CTF")
-        await interaction.response.send_message(f"{interaction.user.mention} Left the CTF")
+        await interaction.response.send_message(f"{interaction.user.mention} left the CTF")
+    elif team_member in interaction.user.roles and interaction.channel.permissions_for(team_member).read_messages:
+        inactive_role = get_inactive_role(interaction.guild, settings=settings)
+
+        await interaction.user.remove_roles(team_member, reason="Left team temporarily")
+        await interaction.user.add_roles(inactive_role, reason="Left team temporarily")
+        await interaction.response.send_message(f"{interaction.user.mention} left the CTF")
     else:
-        await interaction.response.send_message("Cannot leave CTF", ephemeral=True)
+        await interaction.response.send_message("Cannot leave the CTF. Ask an admin for help", ephemeral=True)
+
+
+@app_commands.command(description="Rejoin the team member role after going inactive")
+@app_commands.guild_only
+async def rejoin(interaction: discord.Interaction):
+    settings = get_settings(interaction.guild)
+    team_member = get_team_role(interaction.guild, settings=settings)
+    inactive_role = get_inactive_role(interaction.guild, settings=settings)
+
+    if inactive_role not in interaction.user.roles:
+        raise app_commands.AppCommandError("You are not marked as inactive")
+
+    await interaction.response.defer(ephemeral=True)
+
+    admin_channel = interaction.guild.get_channel(settings.admin_channel)
+    if admin_channel:
+        await admin_channel.send(f"{interaction.user.mention} rejoined the team")
+
+    await interaction.user.remove_roles(inactive_role, reason="Rejoined team")
+    await interaction.user.add_roles(team_member, reason="Rejoined team")
+    await interaction.edit_original_response(content="Rejoined the team")
 
 
 @app_commands.command(description="Remove a user from the CTF")
 @app_commands.guild_only
 @app_commands.check(is_team_admin)
 async def remove(interaction: discord.Interaction, user: discord.Member):
-    ctf_db = await get_ctf_db(interaction)
+    ctf_db = await get_ctf_db(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
 
     ctf_role = interaction.guild.get_role(ctf_db.role_id)
@@ -422,4 +562,5 @@ def add_commands(tree: app_commands.CommandTree, guild: discord.Object | None):
     tree.add_command(invite, guild=guild)
     tree.add_command(inviterole, guild=guild)
     tree.add_command(leave, guild=guild)
+    tree.add_command(rejoin, guild=guild)
     tree.add_command(remove, guild=guild)

@@ -30,6 +30,8 @@ async def setup_hook():
     client.add_view(notes.ModalNoteView())
     client.add_view(notes.HedgeDocNoteView(""))
     client.add_view(challenge.WorkView())
+    client.add_view(ctf.ResponseView())
+    client.add_dynamic_items(ctf.RequestButton)
 
 
 @client.event

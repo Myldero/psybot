@@ -141,6 +141,7 @@ async def setup_settings(guild: discord.Guild):
     discord_values = {
         "admin_role": "Team Admin",
         "team_role": "Team Member",
+        "inactive_role": "Inactive Member",
         "ctfs_category": "CTFS",
         "incomplete_category": "INCOMPLETE CHALLENGES",
         "complete_category": "COMPLETE CHALLENGES",
@@ -179,32 +180,46 @@ def get_settings(guild: discord.Guild) -> GuildSettings:
     return settings
 
 
-def get_admin_role(guild: discord.Guild) -> discord.Role:
-    settings = get_settings(guild)
+def get_admin_role(guild: discord.Guild, settings: GuildSettings | None = None) -> discord.Role:
+    if settings is None:
+        settings = get_settings(guild)
     admin_role = guild.get_role(settings.admin_role)
     if admin_role is None:
         raise app_commands.AppCommandError("Admin role missing. Please re-invite the bot to fix this.")
     return admin_role
 
 
-def get_team_role(guild: discord.Guild) -> discord.Role:
-    settings = get_settings(guild)
+def get_team_role(guild: discord.Guild, settings: GuildSettings | None = None) -> discord.Role:
+    if settings is None:
+        settings = get_settings(guild)
     team_role = guild.get_role(settings.team_role)
     if team_role is None:
         raise app_commands.AppCommandError("Team role missing. Fix this with /psybot set team_role <role_id>")
     return team_role
 
 
-def get_export_channel(guild: discord.Guild) -> discord.TextChannel:
-    settings = get_settings(guild)
+def get_inactive_role(guild: discord.Guild, settings: GuildSettings | None = None) -> discord.Role:
+    if settings is None:
+        settings = get_settings(guild)
+    inactive_role = guild.get_role(settings.inactive_role)
+    if inactive_role is None:
+        raise app_commands.AppCommandError("Inactive role missing. Fix this with /psybot set inactive_role <role_id>")
+    return inactive_role
+
+
+
+def get_export_channel(guild: discord.Guild, settings: GuildSettings | None = None) -> discord.TextChannel:
+    if settings is None:
+        settings = get_settings(guild)
     export_channel = guild.get_channel(settings.export_channel)
     if export_channel is None:
         raise app_commands.AppCommandError("Export channel missing. Fix this with /psybot set export_channel <channel_id>")
     return export_channel
 
 
-def _get_category(guild: discord.Guild, category_name: str) -> discord.CategoryChannel:
-    settings = get_settings(guild)
+def _get_category(guild: discord.Guild, category_name: str, settings: GuildSettings | None = None) -> discord.CategoryChannel:
+    if settings is None:
+        settings = get_settings(guild)
     category = guild.get_channel(getattr(settings, category_name))
     if category is None:
         raise app_commands.AppCommandError("'{0}' category missing. Fix this with /psybot set {0} <category_id>".format(category_name))

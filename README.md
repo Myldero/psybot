@@ -34,6 +34,8 @@ PsyBot adds a number of slash commands for easy and effective CTF management and
 * `/done [contributors]`: Mark a challenge as done
   * Moves the challenge to `COMPLETE CHALLENGES` and sends a notification mentioning all contributors
   * Use `/undone` to move the challenge back if wrongly marked
+* `/ctf invite`: Create a CTF invitation message in `invite_channel`.
+  * Requests will be sent to `admin_channel` for an admin to accept.
 * `/ctf archive`: Archive a CTF
   * Unarchive if needed with `/ctf unarchive`
 * `/ctf export`: Export a CTF
@@ -101,23 +103,27 @@ Settings:
   * By default, all users with this role get access to new CTFs, unless marked with `private:True`
 * `admin_role`: ID of CTF admin role
   * Only admins can create, archive, export, and delete CTFs, create and delete categories, and view and modify settings
+* `inactive_role`: ID of inactive role
+  * When `use_team_role_as_acl` is set to True, team members can temporarily get this role by typing `/leave`
+  * Users with this role do not have access to CTF channels, but can get the team role at any time by running `/rejoin`
 * `ctfs_category`: Discord category for created CTFs, default `CTFS`
 * `incomplete_category`: Discord category for incomplete challenges, default `INCOMPLETE_CHALLENGES`
 * `complete_category`: Discord category for complete challenges, default `COMPLETE_CHALLENGES`
 * `archive_category`: Discord category for archived challenges, default `ARCHIVE`
 * `ctf_archive_category`: Discord category for archived CTF main channels, default `ARCHIVED CTFS`
 * `export_channel`: Channel ID for JSON export uploads
-* `invite_channel`: Channel ID for reaction role invitation messages
+* `invite_channel`: Channel ID for per-ctf invitations. Access requests will be sent to `admin_channel`. Optional.
+* `admin_channel`: Channel ID for admin-only logs. Required together with `invite_channel`. Otherwise, optional.
 * `enforce_categories (default True)`: Players must choose a category from the existing list
   * New categories can be created by team admins
   * If false, players get the selection options but can type any category they want
   * Custom categories are then automatically added to the option list
 * `send_work_message (default True)`: Send a message in each new challenge channel with a "Set Working" button
 * `use_team_role_as_acl (default False)`: Use `team_role` directly as access control for public CTFs
-  * If false, a new role is instead created per CTF for fine-grained access control
+  * If true, team members running `/leave` will be moved to the inactive role
+  * If false, a new role is created per CTF for fine-grained access control
     * This role is automatically given to every player with `team_role` for immediate access
     * New players can be invited with `/invite` and can manually leave with `/leave` or be removed by an admin with `/remove`
-    * This makes it much easier to allow guest players or let members leave if they plan on playing with another team
   * The setting has no effect on private CTFs, a new role is *always* created for these
     * But all players must be manually invited, team members do not get the new role automatically
 * `invite_admin_only (default False)`: Only team admins are allowed to invite players to a CTF

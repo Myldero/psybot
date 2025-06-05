@@ -104,19 +104,16 @@ async def note(interaction: discord.Interaction, type: str = "modal"):
                                             view=ModalNoteView())
     elif type == "doc":
         if interaction.guild is None:
-            await interaction.response.send_message("HedgeDoc notes are only available in a guild")
-            return
+            raise app_commands.AppCommandError("HedgeDoc notes are only available in a guild")
         settings = get_settings(interaction.guild)
         if settings.hedgedoc_url is None:
-            await interaction.response.send_message("HedgeDoc has not been set up in this guild")
-            return
+            raise app_commands.AppCommandError("HedgeDoc has not been set up in this guild")
 
         await interaction.response.defer()
 
         async with aiohttp.ClientSession() as session, session.get(settings.hedgedoc_url + "/new") as response:
             if response.status != 200:
-                await interaction.edit_original_response(content="Could not create a HedgeDoc note")
-                return
+                raise app_commands.AppCommandError("Could not create a HedgeDoc note")
             await interaction.edit_original_response(embed=discord.Embed(title="note", description="", color=HEDGEDOC_NOTE_COLOR, timestamp=datetime.datetime.now()),
                                                 view=HedgeDocNoteView(str(response.url) + "?edit"))
 

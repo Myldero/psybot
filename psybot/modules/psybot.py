@@ -27,6 +27,7 @@ async def check_channel(guild: discord.Guild, value: str):
 
 SETTINGS_TYPES = {
     'team_role': discord.Role,
+    'inactive_role': discord.Role,
     'admin_role': discord.Role,
     'ctfs_category': discord.CategoryChannel,
     'incomplete_category': discord.CategoryChannel,
@@ -34,6 +35,8 @@ SETTINGS_TYPES = {
     'archive_category': discord.CategoryChannel,
     'ctf_archive_category': discord.CategoryChannel,
     'export_channel': discord.TextChannel,
+    'invite_channel': discord.TextChannel,
+    'admin_channel': discord.TextChannel,
     'enforce_categories': bool,
     'send_work_message': bool,
     'use_team_role_as_acl': bool,
@@ -96,7 +99,9 @@ class PsybotCommands(app_commands.Group):
 
         for key, typ in SETTINGS_TYPES.items():
             value = getattr(settings, key)
-            if typ == discord.Role:
+            if value is None:
+                value = "(unset)"
+            elif typ == discord.Role:
                 value = interaction.guild.get_role(value).mention + f" ({value})"
             elif typ == discord.TextChannel:
                 value = interaction.guild.get_channel(value).mention + f" ({value})"

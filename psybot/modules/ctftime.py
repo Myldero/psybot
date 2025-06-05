@@ -4,7 +4,7 @@ import aiohttp
 from urllib.parse import quote_plus
 from dateutil import parser as dateutil_parser
 from discord import app_commands
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, element
 from datetime import datetime
 from tabulate import tabulate
 
@@ -29,7 +29,7 @@ class Ctftime(app_commands.Group):
             }
 
     @staticmethod
-    def get_table_from_html(tbl, raw=False):
+    def get_table_from_html(tbl: element.Tag, raw: bool = False) -> tuple[list[str], list]:
         rows = iter(tbl.find_all('tr'))
         headers = [h.text for h in next(rows).find_all('th')]
 
@@ -50,18 +50,18 @@ class Ctftime(app_commands.Group):
         return headers, d
 
     @staticmethod
-    def check_year(year):
+    def check_year(year: int | None) -> int:
         current_year = datetime.now().year
         if year is None:
             return current_year
         if 0 <= year < 100:
             return year + current_year - current_year % 100
         if year < 2011 or year > current_year:
-            return None
+            raise app_commands.AppCommandError("Invalid year")
         return year
 
     @staticmethod
-    def get_team_url(interaction, team):
+    def get_team_url(interaction, team) -> str | None:
         if team is None:
             if interaction.guild is None:
                 return None
@@ -76,7 +76,7 @@ class Ctftime(app_commands.Group):
         return f'{config.ctftime_url}/team/list/?q={quote_plus(team)}'
 
     @staticmethod
-    async def get_team_top10(team_url, year):
+    async def get_team_top10(team_url, year) -> tuple[str, list, float]:
         async with aiohttp.ClientSession() as session, session.get(team_url) as response:
             if response.status != 200:
                 raise app_commands.AppCommandError("Unknown team")
@@ -112,8 +112,6 @@ class Ctftime(app_commands.Group):
     @app_commands.command(description="Display top teams for a specified year and/or country")
     async def top(self, interaction: discord.Interaction, country: str | None, year: int | None):
         year = self.check_year(year)
-        if year is None:
-            raise app_commands.AppCommandError("Invalid year")
 
         if country and (len(country) != 2 or not country.isalpha()):
             raise app_commands.AppCommandError("Invalid country. Use the alpha-2 country code")
@@ -154,8 +152,6 @@ class Ctftime(app_commands.Group):
     @app_commands.command(description="Show top 10 events for a team")
     async def team(self, interaction: discord.Interaction, team: str | None, year: int | None):
         year = self.check_year(year)
-        if year is None:
-            raise app_commands.AppCommandError("Invalid year")
 
         url = self.get_team_url(interaction, team)
         if url is None:

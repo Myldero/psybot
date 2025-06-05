@@ -17,8 +17,8 @@ from psybot.models.challenge import Challenge
 from psybot.models.ctf import Ctf
 
 
-async def check_challenge(interaction: discord.Interaction) -> tuple[Challenge | None, Ctf | None]:
-    chall_db: Challenge = Challenge.objects(channel_id=interaction.channel_id).first()
+async def check_challenge(channel: discord.TextChannel) -> tuple[Challenge | None, Ctf | None]:
+    chall_db: Challenge = Challenge.objects(channel_id=channel.id).first()
     if chall_db is None:
         raise app_commands.AppCommandError("Not a challenge!")
     ctf_db: Ctf = chall_db.ctf
@@ -89,7 +89,7 @@ class WorkView(ui.View):
 
     @ui.button(label="Set Working", emoji="🛠️", style=discord.ButtonStyle.success, custom_id='work_view:set_working')
     async def set_working(self, interaction: discord.Interaction, _button: ui.Button):
-        chall_db, ctf_db = await check_challenge(interaction)
+        chall_db, ctf_db = await check_challenge(interaction.channel)
         await move_work(interaction.guild, ctf_db, chall_db, interaction.user)
         await interaction.response.defer()
 
@@ -98,7 +98,7 @@ class WorkView(ui.View):
 @app_commands.autocomplete(category=category_autocomplete_nullable)
 @app_commands.guild_only
 async def add(interaction: discord.Interaction, category: str, name: str):
-    ctf_db = await get_ctf_db(interaction)
+    ctf_db = await get_ctf_db(interaction.channel_id)
 
     if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
         admin_role = get_admin_role(interaction.guild)
@@ -152,7 +152,7 @@ async def add(interaction: discord.Interaction, category: str, name: str):
 @app_commands.command(description="Marks a challenge as done")
 @app_commands.guild_only
 async def done(interaction: discord.Interaction, contributors: str | None):
-    chall_db, ctf_db = await check_challenge(interaction)
+    chall_db, ctf_db = await check_challenge(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
 
     await interaction.response.defer()
@@ -179,7 +179,7 @@ async def done(interaction: discord.Interaction, contributors: str | None):
 @app_commands.command(description="Marks a challenge as undone")
 @app_commands.guild_only
 async def undone(interaction: discord.Interaction):
-    chall_db, ctf_db = await check_challenge(interaction)
+    chall_db, ctf_db = await check_challenge(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
 
     if not chall_db.solved:
@@ -277,7 +277,7 @@ def export_table(solves: dict[discord.Member, list[int]], challs: list[str], fil
 @app_commands.command(description="Shortcut to set working status on the challenge")
 @app_commands.guild_only
 async def w(interaction: discord.Interaction):
-    chall_db, ctf_db = await check_challenge(interaction)
+    chall_db, ctf_db = await check_challenge(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
     await move_work(interaction.guild, ctf_db, chall_db, interaction.user)
     await interaction.response.send_message(f"Updated working status to Working", ephemeral=True)
@@ -288,14 +288,14 @@ class WorkingCommands(app_commands.Group):
     @app_commands.choices(value=[app_commands.Choice(name=w.name, value=w.value) for w in WORK_VALUES])
     @app_commands.guild_only
     async def set(self, interaction: discord.Interaction, value: int, user: discord.Member | None):
-        chall_db, ctf_db = await check_challenge(interaction)
+        chall_db, ctf_db = await check_challenge(interaction.channel)
         await set_work(interaction.guild, chall_db, user or interaction.user, value)
         await interaction.response.send_message(f"Updated working status to {WORK_VALUES[value]}", ephemeral=True)
 
     @app_commands.command(description="Get list of people working on the challenge")
     @app_commands.guild_only
     async def get(self, interaction: discord.Interaction):
-        chall_db, ctf_db = await check_challenge(interaction)
+        chall_db, ctf_db = await check_challenge(interaction.channel)
         embeds = get_work_embeds(chall_db)
         await interaction.response.send_message("" if embeds else "Nobody is working on this", embeds=embeds, view=WorkView(),
                                                 ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
@@ -307,7 +307,7 @@ class WorkingCommands(app_commands.Group):
     ])
     @app_commands.guild_only
     async def table(self, interaction: discord.Interaction, filter: int = 1):
-        ctf_db = await get_ctf_db(interaction, archived=None)
+        ctf_db = await get_ctf_db(interaction.channel, archived=None)
         assert isinstance(interaction.channel, discord.TextChannel)
 
         await interaction.response.defer(ephemeral=True)
