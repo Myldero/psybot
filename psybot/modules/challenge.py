@@ -98,7 +98,7 @@ class WorkView(ui.View):
 @app_commands.autocomplete(category=category_autocomplete_nullable)
 @app_commands.guild_only
 async def add(interaction: discord.Interaction, category: str, name: str):
-    ctf_db = await get_ctf_db(interaction.channel_id)
+    ctf_db = await get_ctf_db(interaction.channel)
 
     if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
         admin_role = get_admin_role(interaction.guild)

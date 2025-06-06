@@ -36,13 +36,15 @@ def user_to_dict(user: discord.Member | discord.User):
     """
     Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L156
     """
-    return {
+    d = {
         "id": user.id,
-        "nick": user.nick if isinstance(user, discord.Member) else None,
+        "nick": user.display_name,
         "user": user.name,
-        "avatar": user.avatar.key if user.avatar else None,
-        "bot": user.bot,
+        "avatar": user.display_avatar.key if user.display_avatar else None,
     }
+    if user.bot:
+        d['bot'] = True
+    return d
 
 
 async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -> dict:
@@ -50,30 +52,35 @@ async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -
     Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L778
     """
     ctf_export = {"channels": []}
+    channels_and_threads = []
+    for channel in channels:
+        channels_and_threads.append(channel)
+        for thread in channel.threads:
+            channels_and_threads.append(thread)
+        async for thread in channel.archived_threads(private=False, limit=None):
+            channels_and_threads.append(thread)
+
     async with aiohttp.ClientSession() as session:
-        for channel in channels:
+        for channel in channels_and_threads:
             chan = {
                 "name": channel.name,
-                "topic": channel.topic,
                 "messages": [],
                 "pins": [m.id for m in await channel.pins()],
             }
+
+            if hasattr(channel, "topic") and channel.topic:
+                chan["topic"] = channel.topic
+            if isinstance(channel, discord.Thread):
+                chan["thread_parent"] = channel.parent_id
 
             async for message in channel.history(limit=None, oldest_first=True):
                 entry = {
                     "id": message.id,
                     "created_at": message.created_at.isoformat(),
-                    "content": message.clean_content,
+                    "content": message.content,
                     "author": user_to_dict(message.author),
                     "attachments": [{"filename": a.filename, "url": str(a.url)} for a in message.attachments],
-                    "channel": {
-                        "name": message.channel.name
-                    },
-                    "edited_at": (
-                        message.edited_at.isoformat()
-                        if message.edited_at is not None
-                        else message.edited_at
-                    ),
+                    "edited_at": message.edited_at.isoformat() if message.edited_at is not None else None,
                     "embeds": [e.to_dict() for e in message.embeds],
                     "mentions": [user_to_dict(mention) for mention in message.mentions],
                     "channel_mentions": [{"id": c.id, "name": c.name} for c in message.channel_mentions],
