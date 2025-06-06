@@ -50,6 +50,8 @@ async def on_ready():
         for guild in client.guilds:
             await setup_settings(guild)
         await tree.sync()
+    activity = discord.Activity(name="CTF", type=discord.ActivityType.playing)
+    await client.change_presence(activity=activity)
     logging.info(f"{client.user.name} Online")
 
 
