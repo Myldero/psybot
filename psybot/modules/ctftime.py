@@ -25,7 +25,7 @@ class Ctftime(app_commands.Group):
                 'title': data['title'],
                 'url': data['url'],
                 'start': int(dateutil_parser.parse(data["start"]).timestamp()),
-                'end': int(dateutil_parser.parse(data["start"]).timestamp()),
+                'end': int(dateutil_parser.parse(data["finish"]).timestamp()),
             }
 
     @staticmethod
