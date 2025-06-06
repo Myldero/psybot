@@ -63,6 +63,7 @@ async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -
     async with aiohttp.ClientSession() as session:
         for channel in channels_and_threads:
             chan = {
+                "id": channel.id,
                 "name": channel.name,
                 "messages": [],
                 "pins": [m.id for m in await channel.pins()],
@@ -84,7 +85,6 @@ async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -
                     "embeds": [e.to_dict() for e in message.embeds],
                     "mentions": [user_to_dict(mention) for mention in message.mentions],
                     "channel_mentions": [{"id": c.id, "name": c.name} for c in message.channel_mentions],
-                    "mention_everyone": message.mention_everyone,
                     "reactions": [
                         {
                             "count": r.count,
@@ -92,10 +92,14 @@ async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -
                         } for r in message.reactions
                     ]
                 }
+                if message.mention_everyone:
+                    entry["mention_everyone"] = True
+                if message.thread:
+                    entry['thread'] = message.thread.id
 
                 if not config.disable_download:
-                    for attachment in entry["attachments"]:
-                        file_path = file_dir / "{}_{}".format(channel.id,  attachment["filename"])
+                    for i, attachment in enumerate(entry["attachments"]):
+                        file_path = file_dir / "{}{}_{}".format(message.id, i, attachment["filename"])
                         try:
                             async with session.get(attachment["url"]) as resp:
                                 if resp.status == 200:
@@ -548,26 +552,32 @@ async def leave(interaction: discord.Interaction):
     ctf_db = await get_ctf_db(interaction.channel)
     assert isinstance(interaction.channel, discord.TextChannel)
 
+    await interaction.response.defer(ephemeral=True)
 
     settings = get_settings(interaction.guild)
     team_member = get_team_role(interaction.guild, settings=settings)
     ctf_role = interaction.guild.get_role(ctf_db.role_id)
+    admin_channel = interaction.guild.get_channel(settings.admin_channel)
     success = False
 
     if ctf_role in interaction.user.roles:
         await interaction.user.remove_roles(ctf_role, reason="Left CTF")
         success = True
+        if admin_channel:
+            await admin_channel.send(f"{interaction.user.mention} left {interaction.channel.mention}")
 
     if team_member in interaction.user.roles and interaction.channel.permissions_for(team_member).read_messages:
         inactive_role = get_inactive_role(interaction.guild, settings=settings)
         await interaction.user.remove_roles(team_member, reason="Left team temporarily")
         await interaction.user.add_roles(inactive_role, reason="Left team temporarily")
         success = True
+        if admin_channel:
+            await admin_channel.send(f"{interaction.user.mention} left the team temporarily")
 
-    if success:
-        await interaction.response.send_message(f"{interaction.user.mention} left the CTF")
-    else:
-        await interaction.response.send_message("Cannot leave the CTF. Ask an admin for help", ephemeral=True)
+    if not success:
+        await interaction.edit_original_response(content="Cannot leave the CTF. Ask an admin for help")
+        if admin_channel:
+            await admin_channel.send(f"{interaction.user.mention} could not leave {interaction.channel.mention}!")
 
 
 @app_commands.command(description="Rejoin the team member role after going inactive")
