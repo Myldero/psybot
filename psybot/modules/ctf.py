@@ -32,6 +32,25 @@ async def get_ctf_db(channel: discord.TextChannel, archived: bool | None = False
     return ctf_db
 
 
+async def create_voice_channels(guild: discord.Guild, ctf_name: str, overwrites: dict, settings: GuildSettings) -> list[int]:
+    voice_channels = []
+    voice_category = get_voice_category(guild, settings=settings) if settings.per_ctf_voice_channels > 0 else None
+
+    # Remove send_message permissions. We don't want more work when archiving
+    overwrites = overwrites.copy()
+    overwrites[guild.default_role] = discord.PermissionOverwrite(view_channel=False, send_messages=False)
+    total_voice_channels = min(9, settings.per_ctf_voice_channels)
+    for i in range(1, total_voice_channels + 1):
+        voice_name = f'{ctf_name}-voice' if total_voice_channels == 1 else f'{ctf_name}-voice-{i}'
+        try:
+            new_channel = await voice_category.create_voice_channel(voice_name, overwrites=overwrites)
+            voice_channels.append(new_channel.id)
+        except discord.HTTPException:
+            # We've filled up the voice_category with 50 channels. Just skip the rest.
+            break
+    return voice_channels
+
+
 def user_to_dict(user: discord.Member | discord.User):
     """
     Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L156
@@ -98,8 +117,8 @@ async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -
                     entry['thread'] = message.thread.id
 
                 if not config.disable_download:
-                    for i, attachment in enumerate(entry["attachments"]):
-                        file_path = file_dir / "{}{}_{}".format(message.id, i, attachment["filename"])
+                    for j, attachment in enumerate(entry["attachments"]):
+                        file_path = file_dir / "{}{}_{}".format(message.id, j, attachment["filename"])
                         try:
                             async with session.get(attachment["url"]) as resp:
                                 if resp.status == 200:
@@ -189,7 +208,7 @@ class RequestButton(ui.DynamicItem[ui.Button], template=r'invite_request:ctf:(?P
             await interaction.response.send_message('The request has been sent!', ephemeral=True)
             await admin_channel.send(embed=discord.Embed(
                 title='CTF Access Request',
-                description="<@{}> has requested access to <#{}>".format(interaction.user.id, ctf_channel.id),
+                description="<@{}> (`{}`) has requested access to <#{}>".format(interaction.user.id, interaction.user.name, ctf_channel.id),
                 color=discord.Color.blurple()), view=ResponseView())
         except app_commands.AppCommandError as e:
             await interaction.response.send_message(e.args[0], ephemeral=True)
@@ -203,7 +222,7 @@ class ResponseView(ui.View):
     async def accept_invite(self, interaction: discord.Interaction, _button: ui.Button):
         await is_team_admin(interaction)  # Raises an exception if not an admin
         message = interaction.message.embeds[0].description
-        m = re.match(r'<@([0-9]+)> has requested access to <#([0-9]+)>', message)
+        m = re.match(r'<@(\d+)> \(`\S+`\) has requested access to <#(\d+)>', message)
         if m is None:
             raise app_commands.AppCommandError("Invalid invite")
         user = interaction.guild.get_member(int(m[1]))
@@ -233,7 +252,9 @@ class CtfCommands(app_commands.Group):
     @app_commands.guild_only
     @app_commands.check(is_team_admin)
     async def create(self, interaction: discord.Interaction, name: str, ctftime: str | None, private: bool = False):
-        if len(interaction.guild.channels) >= MAX_CHANNELS - 3:
+        settings = get_settings(interaction.guild)
+
+        if len(interaction.guild.channels) >= MAX_CHANNELS - 2 - max(0, settings.per_ctf_voice_channels):
             raise app_commands.AppCommandError("There are too many channels on this discord server")
         name = sanitize_channel_name(name)
         if not name:
@@ -241,9 +262,9 @@ class CtfCommands(app_commands.Group):
 
         await interaction.response.defer()
 
-        settings = get_settings(interaction.guild)
+        ctf_category = get_ctfs_category(interaction.guild, settings=settings)
 
-        new_role = await interaction.guild.create_role(name=name + "-team")
+        new_role = await interaction.guild.create_role(name=f"{name}-team")
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
             new_role: discord.PermissionOverwrite(view_channel=True)
@@ -253,7 +274,6 @@ class CtfCommands(app_commands.Group):
         if private:
             await interaction.user.add_roles(new_role)
 
-        ctf_category = get_ctfs_category(interaction.guild)
         new_channel = await create_channel(name, overwrites, ctf_category, challenge=False)
 
         info = {'title': name}
@@ -268,7 +288,8 @@ class CtfCommands(app_commands.Group):
 
         await info_msg.pin()
 
-        ctf_db = Ctf(name=name, channel_id=new_channel.id, role_id=new_role.id, info=info, info_id=info_msg.id, private=private)
+        voice_channels = await create_voice_channels(interaction.guild, name, overwrites, settings)
+        ctf_db = Ctf(name=name, channel_id=new_channel.id, role_id=new_role.id, info=info, info_id=info_msg.id, voice_channels=voice_channels, private=private)
         ctf_db.save()
 
         await interaction.edit_original_response(content=f"Created ctf {new_channel.mention}")
@@ -391,6 +412,14 @@ class CtfCommands(app_commands.Group):
                 chall.delete()
 
         await move_channel(interaction.channel, get_ctf_archive_category(interaction.guild), challenge=False)
+
+        # Remove voice channels
+        for channel_id in ctf_db.voice_channels:
+            channel = interaction.guild.get_channel(channel_id)
+            if channel:
+                await channel.delete()
+
+        ctf_db.voice_channels = []
         ctf_db.archived = True
         ctf_db.save()
         await interaction.edit_original_response(content="The CTF has been archived")
@@ -404,6 +433,8 @@ class CtfCommands(app_commands.Group):
 
         await interaction.response.defer()
 
+        settings = get_settings(interaction.guild)
+
         for chall in Challenge.objects(ctf=ctf_db):
             channel = interaction.guild.get_channel(chall.channel_id)
             target_category = get_complete_category(interaction.guild) if chall.solved else get_incomplete_category(interaction.guild)
@@ -413,6 +444,11 @@ class CtfCommands(app_commands.Group):
                 chall.delete()
 
         await move_channel(interaction.channel, get_ctfs_category(interaction.guild), challenge=False)
+
+        # Re-create voice channels
+        voice_channels = await create_voice_channels(interaction.guild, ctf_db.name, interaction.channel.overwrites, settings)
+
+        ctf_db.voice_channels = voice_channels
         ctf_db.archived = False
         ctf_db.save()
         await interaction.edit_original_response(content="The CTF has been unarchived")
@@ -446,6 +482,14 @@ class CtfCommands(app_commands.Group):
                     await channel.edit(name=f"{name}-{chall.name}")
             else:
                 chall.delete()
+
+        # Rename voice channels
+        for i, channel_id in enumerate(ctf_db.voice_channels):
+            channel = interaction.guild.get_channel(channel_id)
+            if channel:
+                voice_name = f"{ctf_db.name}-voice" if len(ctf_db.voice_channels) == 1 else f"{ctf_db.name}-voice-{i}"
+                await channel.edit(name=voice_name)
+
         await interaction.edit_original_response(content="The CTF has been renamed")
 
     @app_commands.command(description="Export an archived CTF")

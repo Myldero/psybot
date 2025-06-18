@@ -34,9 +34,11 @@ SETTINGS_TYPES = {
     'complete_category': discord.CategoryChannel,
     'archive_category': discord.CategoryChannel,
     'ctf_archive_category': discord.CategoryChannel,
+    'voice_category': discord.CategoryChannel,
     'export_channel': discord.TextChannel,
     'invite_channel': discord.TextChannel,
     'admin_channel': discord.TextChannel,
+    'per_ctf_voice_channels': int,
     'enforce_categories': bool,
     'send_work_message': bool,
     'use_team_role_as_acl': bool,
@@ -77,6 +79,8 @@ class PsybotCommands(app_commands.Group):
                 raise app_commands.AppCommandError("Invalid boolean value. Please choose (y/n)")
         elif typ == str:
             setattr(settings, key, value)
+        elif typ == int:
+            setattr(settings, key, int(value))
         else:
             raise app_commands.AppCommandError("Invalid key")
 

@@ -1,4 +1,4 @@
-from mongoengine import Document, LongField, StringField, BooleanField
+from mongoengine import Document, LongField, IntField, StringField, BooleanField
 
 
 class GuildSettings(Document):
@@ -10,10 +10,12 @@ class GuildSettings(Document):
     incomplete_category = LongField(required=True)
     complete_category = LongField(required=True)
     archive_category = LongField(required=True)
+    voice_category = LongField(required=True)
     ctf_archive_category = LongField(required=True)
     export_channel = LongField(required=True)
     invite_channel = LongField(default=None)
     admin_channel = LongField(default=None)
+    per_ctf_voice_channels = IntField(default=0)
     enforce_categories = BooleanField(default=True)
     send_work_message = BooleanField(default=True)
     use_team_role_as_acl = BooleanField(default=False)

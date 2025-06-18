@@ -145,6 +145,7 @@ async def setup_settings(guild: discord.Guild):
         "ctfs_category": "CTFS",
         "incomplete_category": "INCOMPLETE CHALLENGES",
         "complete_category": "COMPLETE CHALLENGES",
+        'voice_category': "Voice Channels",
         "archive_category": "ARCHIVE",
         "ctf_archive_category": "ARCHIVED CTFS",
         "export_channel": "export"
@@ -221,12 +222,13 @@ def _get_category(guild: discord.Guild, category_name: str, settings: GuildSetti
     if settings is None:
         settings = get_settings(guild)
     category = guild.get_channel(getattr(settings, category_name))
-    if category is None:
+    if not isinstance(category, discord.CategoryChannel):
         raise app_commands.AppCommandError("'{0}' category missing. Fix this with /psybot set {0} <category_id>".format(category_name))
     return category
 
-get_ctfs_category = lambda g: _get_category(g, 'ctfs_category')
-get_incomplete_category = lambda g: _get_category(g, 'incomplete_category')
-get_complete_category = lambda g: _get_category(g, 'complete_category')
-get_archive_category = lambda g: _get_category(g, 'archive_category')
-get_ctf_archive_category = lambda g: _get_category(g, 'ctf_archive_category')
+get_ctfs_category = lambda g, settings=None: _get_category(g, 'ctfs_category')
+get_incomplete_category = lambda g, settings=None: _get_category(g, 'incomplete_category')
+get_complete_category = lambda g, settings=None: _get_category(g, 'complete_category')
+get_archive_category = lambda g, settings=None: _get_category(g, 'archive_category')
+get_ctf_archive_category = lambda g, settings=None: _get_category(g, 'ctf_archive_category')
+get_voice_category = lambda g, settings=None: _get_category(g, 'voice_category')

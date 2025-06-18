@@ -107,13 +107,15 @@ Settings:
   * When `use_team_role_as_acl` is set to True, team members can temporarily get this role by typing `/leave`
   * Users with this role do not have access to CTF channels, but can get the team role at any time by running `/rejoin`
 * `ctfs_category`: Discord category for created CTFs, default `CTFS`
-* `incomplete_category`: Discord category for incomplete challenges, default `INCOMPLETE_CHALLENGES`
-* `complete_category`: Discord category for complete challenges, default `COMPLETE_CHALLENGES`
+* `incomplete_category`: Discord category for incomplete challenges, default `INCOMPLETE CHALLENGES`
+* `complete_category`: Discord category for complete challenges, default `COMPLETE CHALLENGES`
 * `archive_category`: Discord category for archived challenges, default `ARCHIVE`
 * `ctf_archive_category`: Discord category for archived CTF main channels, default `ARCHIVED CTFS`
+* `voice_category`: Discord category for per-ctf voice channels, default `Voice Channels`
 * `export_channel`: Channel ID for JSON export uploads
-* `invite_channel`: Channel ID for per-ctf invitations. Access requests will be sent to `admin_channel`. Optional.
-* `admin_channel`: Channel ID for admin-only logs. Required together with `invite_channel`. Otherwise, optional.
+* `invite_channel`: Channel ID for per-ctf invitations. Access requests will be sent to `admin_channel`. Optional
+* `admin_channel`: Channel ID for admin-only logs. Required together with `invite_channel`. Otherwise, optional
+* `per_ctf_voice_channels`: Number of voice channels to create in `voice_category` when creating a CTF, default 0
 * `enforce_categories (default True)`: Players must choose a category from the existing list
   * New categories can be created by team admins
   * If false, players get the selection options but can type any category they want

@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, BooleanField, LongField, DictField
+from mongoengine import Document, StringField, BooleanField, LongField, DictField, ListField
 
 
 class Ctf(Document):
@@ -9,6 +9,7 @@ class Ctf(Document):
     info_id = LongField(required=True)
     private = BooleanField(required=True)
     archived = BooleanField(required=True, default=False)
+    voice_channels = ListField(LongField(), default=[])
     meta = {
         'indexes': [
             {
