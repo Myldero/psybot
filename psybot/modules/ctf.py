@@ -12,6 +12,7 @@ from pathlib import Path
 
 from psybot.utils import *
 from psybot.modules.ctftime import Ctftime
+from psybot.modules.export import export_channels, reexport_ctf
 from psybot.config import config
 
 from psybot.models.challenge import Challenge
@@ -49,95 +50,6 @@ async def create_voice_channels(guild: discord.Guild, ctf_name: str, overwrites:
             # We've filled up the voice_category with 50 channels. Just skip the rest.
             break
     return voice_channels
-
-
-def user_to_dict(user: discord.Member | discord.User):
-    """
-    Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L156
-    """
-    d = {
-        "id": user.id,
-        "nick": user.display_name,
-        "user": user.name,
-        "avatar": user.display_avatar.key if user.display_avatar else None,
-    }
-    if user.bot:
-        d['bot'] = True
-    return d
-
-
-async def export_channels(channels: list[discord.TextChannel], file_dir: Path) -> dict:
-    """
-    Based on https://github.com/ekofiskctf/fiskebot/blob/eb774b7/bot/ctf_model.py#L778
-    """
-    ctf_export = {"channels": []}
-    channels_and_threads = []
-    for channel in channels:
-        channels_and_threads.append(channel)
-        for thread in channel.threads:
-            channels_and_threads.append(thread)
-        async for thread in channel.archived_threads(private=False, limit=None):
-            channels_and_threads.append(thread)
-
-    async with aiohttp.ClientSession() as session:
-        for channel in channels_and_threads:
-            chan = {
-                "id": channel.id,
-                "name": channel.name,
-                "messages": [],
-                "pins": [m.id for m in await channel.pins()],
-            }
-
-            if hasattr(channel, "topic") and channel.topic:
-                chan["topic"] = channel.topic
-            if isinstance(channel, discord.Thread):
-                chan["thread_parent"] = channel.parent_id
-
-            async for message in channel.history(limit=None, oldest_first=True):
-                entry = {
-                    "id": message.id,
-                    "created_at": message.created_at.isoformat(),
-                    "content": message.content,
-                    "author": user_to_dict(message.author),
-                    "attachments": [{"filename": a.filename, "url": str(a.url)} for a in message.attachments],
-                    "edited_at": message.edited_at.isoformat() if message.edited_at is not None else None,
-                    "embeds": [e.to_dict() for e in message.embeds],
-                    "mentions": [user_to_dict(mention) for mention in message.mentions],
-                    "channel_mentions": [{"id": c.id, "name": c.name} for c in message.channel_mentions],
-                    "reactions": [
-                        {
-                            "count": r.count,
-                            "emoji": r.emoji if isinstance(r.emoji, str) else {"name": r.emoji.name, "url": r.emoji.url},
-                        } for r in message.reactions
-                    ]
-                }
-                if message.mention_everyone:
-                    entry["mention_everyone"] = True
-                if message.thread:
-                    entry['thread'] = message.thread.id
-
-                if not config.disable_download:
-                    for j, attachment in enumerate(entry["attachments"]):
-                        file_path = file_dir / "{}{}_{}".format(message.id, j, attachment["filename"])
-                        try:
-                            async with session.get(attachment["url"]) as resp:
-                                if resp.status == 200:
-                                    with open(file_path, 'wb') as f:
-                                        while True:
-                                            chunk = await resp.content.readany()
-                                            if not chunk:
-                                                break
-                                            f.write(chunk)
-                                else:
-                                    logging.warning(f"Export: failed with status {resp.status}")
-                                    attachment["error"] = f"Failed with status {resp.status}"
-                        except Exception as e:
-                            traceback.print_exc()
-                            attachment["error"] = str(e)
-
-                chan["messages"].append(entry)
-            ctf_export["channels"].append(chan)
-    return ctf_export
 
 
 def create_info_message(info):
@@ -499,6 +411,8 @@ class CtfCommands(app_commands.Group):
         ctf_db = await get_ctf_db(interaction.channel, archived=None, allow_chall=False)
         assert isinstance(interaction.channel, discord.TextChannel)
 
+        export_channel = get_export_channel(interaction.guild)
+
         await interaction.response.defer()
 
         channels = [interaction.channel]
@@ -510,15 +424,15 @@ class CtfCommands(app_commands.Group):
             else:
                 chall.delete()
 
-        dirs = Path(config.backups_dir) / str(interaction.guild_id) / f"{interaction.channel_id}_{ctf_db.name}"
+        attachment_dir = Path(config.backups_dir) / str(interaction.guild_id) / f"{interaction.channel_id}_{ctf_db.name}"
         try:
-            dirs.mkdir(parents=True, exist_ok=True)
+            attachment_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
-            logging.warning(f"Failed to create directory {dirs}")
+            logging.warning(f"Failed to create directory {attachment_dir}")
 
-        ctf_export = await export_channels(channels, dirs)
+        ctf_export = await export_channels(channels, attachment_dir)
 
-        filepath = dirs.parent / f"{interaction.channel_id}_{ctf_db.name}.json"
+        filepath = attachment_dir.parent / f"{interaction.channel_id}_{ctf_db.name}.json"
 
         try:
             with open(filepath, 'w') as f:
@@ -527,9 +441,8 @@ class CtfCommands(app_commands.Group):
             # Export dir was not created
             raise app_commands.AppCommandError("Invalid file permissions when exporting CTF")
 
-        export_channel = get_export_channel(interaction.guild)
-        await export_channel.send(files=[discord.File(filepath, filename=f"{ctf_db.name}.json")])
-        await interaction.edit_original_response(content=f"The CTF has been exported")
+        await interaction.edit_original_response(content=f"The CTF has been exported. It can safely be deleted now.")
+        await reexport_ctf(export_channel, ctf_export, attachment_dir)
 
     @app_commands.command(description="Delete a CTF and its channels")
     @app_commands.guild_only
