@@ -53,7 +53,7 @@ async def create_voice_channels(guild: discord.Guild, ctf_name: str, overwrites:
 
 
 def create_info_message(info):
-    msg = discord.utils.escape_mentions(info['title'])
+    msg = '# ' + discord.utils.escape_mentions(info['title'])
     if 'start' in info or 'end' in info:
         msg += "\n"
     if 'start' in info:
@@ -63,7 +63,7 @@ def create_info_message(info):
     if 'url' in info:
         msg += f"\n\n{info['url']}"
     if 'creds' in info:
-        msg += "\n\n**CREDENTIALS**\n" + discord.utils.escape_mentions(info['creds'])
+        msg += "\n## Credentials\n" + discord.utils.escape_mentions(info['creds'])
     return msg
 
 
@@ -269,9 +269,13 @@ class CtfCommands(app_commands.Group):
                     raise app_commands.AppCommandError("Invalid time, please use any standard time format")
             info[field] = t
         elif field == "creds":
-            c = value.split(":", 1)
-            username, password = c[0], c[1] if len(c) > 1 else "password"
-            original = f"Name: `{username}`\nPassword: `{password}`"
+            if re.search(r'^https?://\S+$', value):
+                original = f"[LOGIN LINK](<{value}>)"
+            elif value.count(":") == 1:
+                username, password = value.split(":", 1)
+                original = f"Name: `{username}`\nPassword: `{password}`"
+            else:
+                original = value
 
             class CredsModal(ui.Modal, title='Edit Credentials'):
                 edit = ui.TextInput(label='Edit', style=discord.TextStyle.paragraph, default=original, max_length=1000)
@@ -286,7 +290,7 @@ class CtfCommands(app_commands.Group):
             await interaction.response.send_modal(CredsModal())
             return
         elif field == "url":
-            if re.search(r'^https?://', value):
+            if re.search(r'^(?:\[[^\]]+\])?\(?<?https?://\S+>?\)?$', value):
                 info["url"] = value
             else:
                 raise app_commands.AppCommandError("Invalid url")
