@@ -79,7 +79,7 @@ async def export_channels(channels: list[discord.TextChannel], attachment_dir: P
 
                 if not config.disable_download:
                     for j, attachment in enumerate(entry["attachments"]):
-                        file_path = attachment_dir / "{}{}_{}".format(message.id, j, attachment["filename"])
+                        file_path = attachment_dir / "{}{}_{}".format(message.id, j, attachment["filename"].replace('/',''))
                         try:
                             async with session.get(attachment["url"]) as resp:
                                 if resp.status == 200:
@@ -165,7 +165,7 @@ async def reexport_ctf(export_channel: discord.TextChannel, ctf_export: dict, at
             total_size = 0
             # TODO: If all the files are below 10 MB and just the sum of them is above, then we can just upload them in the following messages.
             for j, attachment in enumerate(message['attachments']):
-                file_path = str(attachment_dir / "{}{}_{}".format(message['id'], j, attachment["filename"]))
+                file_path = str(attachment_dir / "{}{}_{}".format(message['id'], j, attachment["filename"].replace('/','')))
                 try:
                     f = open(file_path, 'rb')
                     f.seek(0, 2)
