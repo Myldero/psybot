@@ -143,7 +143,7 @@ class ResponseView(ui.View):
         role = interaction.guild.get_role(ctf_db.role_id)
         await user.add_roles(role)
         await channel.send("Invited user {}".format(user.mention))
-        await interaction.message.edit(embed=discord.Embed(
+        await interaction.response.edit_message(embed=discord.Embed(
             title='CTF Access Request',
             description=message,
             color=discord.Color.green(),
@@ -152,11 +152,20 @@ class ResponseView(ui.View):
     @ui.button(label="Deny", style=discord.ButtonStyle.danger, custom_id='invite_response:deny')
     async def deny_invite(self, interaction: discord.Interaction, _button: ui.Button):
         await is_team_admin(interaction)  # Raises an exception if not an admin
-        await interaction.message.edit(embed=discord.Embed(
+        await interaction.response.edit_message(embed=discord.Embed(
             title='CTF Access Request',
             description=interaction.message.embeds[0].description,
             color=discord.Color.red(),
             ).set_footer(text="Denied by {}".format(interaction.user.display_name)), view=None)
+
+    @ui.button(label="Will Handle", style=discord.ButtonStyle.gray, custom_id='invite_response:handle')
+    async def handle_invite(self, interaction: discord.Interaction, _button: ui.Button):
+        await is_team_admin(interaction)  # Raises an exception if not an admin
+        await interaction.response.edit_message(embed=discord.Embed(
+            title='CTF Access Request',
+            description=interaction.message.embeds[0].description,
+            color=discord.Color.blurple()
+            ).set_footer(text="Will be handled by {}".format(interaction.user.display_name)))
 
 
 class CtfCommands(app_commands.Group):
