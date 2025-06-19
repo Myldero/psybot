@@ -433,6 +433,7 @@ class CtfCommands(app_commands.Group):
             attachment_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
             logging.warning(f"Failed to create directory {attachment_dir}")
+            raise app_commands.AppCommandError("Failed to create attachment directory")
 
         ctf_export = await export_channels(channels, attachment_dir)
 
