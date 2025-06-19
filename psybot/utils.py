@@ -16,7 +16,8 @@ def get_category_pos(category_channel: discord.CategoryChannel, name: str):
     elif name.count("-") == 2:
         ctf, category, _ = name.split("-")
     else:
-        raise app_commands.AppCommandError("Not a challenge")
+        # This channel doesn't have the challenge name format.
+        return (category_channel.text_channels[-1].position // 1000 + 1) * 1000
     same_category_channel = None
     same_ctf_channel = None
     for channel in category_channel.text_channels:
