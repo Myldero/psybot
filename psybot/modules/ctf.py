@@ -41,10 +41,11 @@ async def create_voice_channels(guild: discord.Guild, ctf_name: str, overwrites:
     overwrites = overwrites.copy()
     overwrites[guild.default_role] = discord.PermissionOverwrite(view_channel=False, send_messages=False)
     # Add connect permission
-    for overwrite in overwrites:
-        overwrite.connect = True
-        overwrite.speak = True
-        overwrite.send_messages = False
+    for _, overwrite in overwrites.items():
+        if isinstance(overwrite, discord.PermissionOverwrite):
+            overwrite.connect = True
+            overwrite.speak = True
+            overwrite.send_messages = False
     total_voice_channels = min(9, settings.per_ctf_voice_channels)
     for i in range(1, total_voice_channels + 1):
         voice_name = f'{ctf_name}-voice' if total_voice_channels == 1 else f'{ctf_name}-voice-{i}'
