@@ -40,6 +40,11 @@ async def create_voice_channels(guild: discord.Guild, ctf_name: str, overwrites:
     # Remove send_message permissions. We don't want more work when archiving
     overwrites = overwrites.copy()
     overwrites[guild.default_role] = discord.PermissionOverwrite(view_channel=False, send_messages=False)
+    # Add connect permission
+    for overwrite in overwrites:
+        overwrite.connect = True
+        overwrite.speak = True
+        overwrite.send_messages = False
     total_voice_channels = min(9, settings.per_ctf_voice_channels)
     for i in range(1, total_voice_channels + 1):
         voice_name = f'{ctf_name}-voice' if total_voice_channels == 1 else f'{ctf_name}-voice-{i}'
@@ -188,10 +193,10 @@ class CtfCommands(app_commands.Group):
         new_role = await interaction.guild.create_role(name=f"{name}-team")
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            new_role: discord.PermissionOverwrite(view_channel=True)
+            new_role: discord.PermissionOverwrite(view_channel=True, read_message_history=True, send_messages=True)
         }
         if not private and settings.use_team_role_as_acl:
-            overwrites[get_team_role(interaction.guild, settings=settings)] = discord.PermissionOverwrite(view_channel=True)
+            overwrites[get_team_role(interaction.guild, settings=settings)] = discord.PermissionOverwrite(view_channel=True, read_message_history=True, send_messages=True)
         if private:
             await interaction.user.add_roles(new_role)
 
