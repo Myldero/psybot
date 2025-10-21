@@ -35,8 +35,8 @@ async def category_autocomplete(interaction: discord.Interaction, current: str) 
 
 async def category_autocomplete_nullable(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     out = await category_autocomplete(interaction, current)
-    if len(out) < 25 and "none".startswith(current):
-        out.append(app_commands.Choice(name='None', value=''))
+    if len(out) < 25 and "none".startswith(current.lower()):
+        out.append(app_commands.Choice(name='None', value='None'))
     return out
 
 
@@ -111,7 +111,7 @@ async def add(interaction: discord.Interaction, category: str, name: str):
     ctf = sanitize_channel_name(ctf_db.name) or '_'
     name = sanitize_channel_name(name) or '_'
 
-    if category:
+    if category and category.lower() != 'none':
         category = sanitize_channel_name(category) or '_'
         fullname = f"{ctf}-{category}-{name}"
     else:
