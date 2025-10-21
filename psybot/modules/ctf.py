@@ -139,6 +139,7 @@ class ResponseView(ui.View):
     @ui.button(label="Accept", style=discord.ButtonStyle.success, custom_id='invite_response:accept')
     async def accept_invite(self, interaction: discord.Interaction, _button: ui.Button):
         await is_team_admin(interaction)  # Raises an exception if not an admin
+        await interaction.response.defer()
         message = interaction.message.embeds[0].description
         m = re.match(r'<@(\d+)> \(`\S+`\) has requested access to <#(\d+)>', message)
         if m is None:
@@ -147,9 +148,10 @@ class ResponseView(ui.View):
         channel = interaction.guild.get_channel(int(m[2]))
         ctf_db = await get_ctf_db(channel, archived=False, allow_chall=False)
         role = interaction.guild.get_role(ctf_db.role_id)
-        await user.add_roles(role)
-        await channel.send("Invited user {}".format(user.mention))
-        await interaction.response.edit_message(embed=discord.Embed(
+        if role not in user.roles:
+            await user.add_roles(role)
+            await channel.send("Invited user {}".format(user.mention))
+        await interaction.edit_original_response(embed=discord.Embed(
             title='CTF Access Request',
             description=message,
             color=discord.Color.green(),
