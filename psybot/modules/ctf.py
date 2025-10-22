@@ -350,8 +350,10 @@ class CtfCommands(app_commands.Group):
         for channel_id in ctf_db.voice_channels:
             channel = interaction.guild.get_channel(channel_id)
             if channel:
-                await channel.delete()
-
+                try:
+                    await channel.delete()
+                except discord.HTTPException:
+                    pass
         ctf_db.voice_channels = []
         ctf_db.archived = True
         ctf_db.save()
@@ -489,6 +491,16 @@ class CtfCommands(app_commands.Group):
             await interaction.guild.get_role(ctf_db.role_id).delete(reason="Deleted CTF channels")
         except AttributeError:
             pass
+
+        # Remove voice channels
+        for channel_id in ctf_db.voice_channels:
+            channel = interaction.guild.get_channel(channel_id)
+            if channel:
+                try:
+                    await channel.delete()
+                except discord.HTTPException:
+                    pass
+
         await delete_channel(interaction.channel)
         Challenge.objects(ctf=ctf_db).delete()
         ctf_db.delete()
